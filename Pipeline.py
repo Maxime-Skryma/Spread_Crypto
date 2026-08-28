@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.stattools import coint 
+
 
 
 def adf_manuel(log, p): #log est notre série, p est le nombre de lags
@@ -107,3 +109,48 @@ def pipeline(df):
                 nom_colonne = f'Res of {ls1} on {ls2}' #On stocke le nom de la colonne
                 t_stat = adfuller(df[nom_colonne], maxlag=p, autolag='AIC', regression='n')[0] #On applique un ADF sur le résidu
                 f.write(f'{nom_colonne} has a t_value of {t_stat}\n')
+    
+    with open("Spread_Crypto/results/p_value_Res_ADF.txt", "w") as f:
+    for ls1 in log_symbols:
+        for ls2 in log_symbols:
+            if ls1 != ls2:
+                _, pvalue, _= coint(df[ls1], df[ls2]) #we just want to keep p_values
+                f.write(f'{nom_colonne} has a t_value of {pvalue}\n')
+    
+    #===================================================
+    #VAR representation / Eigen Values / Modules
+    # with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
+    matrice_prix=df[log_symbols].to_numpy() 
+    
+    # Toutes les différences
+    delta_Y = matrice_prix[1:] - matrice_prix[:-1] 
+
+    max_lags = 20
+    dim=len(log_symbols)
+    # Boucle OLS
+    for p in range(1, max_lags + 1):
+        
+        f.write(f"\n{'='*40}")
+        f.write(f"ESTIMATION DU MODÈLE AVEC p = {p}")
+        f.write(f"{'='*40}")
+        
+        # On sacrifie 'p' jours
+        Y_t_1_niveaux = matrice_prix[p : -1]
+        Y_cible = delta_Y[p:]
+        
+        # On crée la liste des retards pour ce 'p'
+        liste_des_retards = [delta_Y[p-k : -k] for k in range(1, p + 1)]
+        
+        X_matrice = np.hstack([Y_t_1_niveaux] + liste_des_retards)
+        X_avec_constante = sm.add_constant(X_matrice)
+        
+        # OLS
+        coefficients_globaux, residus, rang, val_sing = np.linalg.lstsq(X_avec_constante, Y_cible, rcond=None)
+        
+        # Calcul des valeurs propres issues de la VECM
+        matrice_Pi_brute = coefficients_globaux[1:dim+1, :]
+        A = matrice_Pi_brute + np.eye(dim)
+        
+        eigen_values = np.linalg.eigvals(A)
+        modules = np.abs(eigen_values)
+        f.write(f"Modules des valeurs propres : {np.round(modules, 4)}")
