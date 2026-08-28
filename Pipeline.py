@@ -5,6 +5,9 @@ import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.stattools import coint
 from statsmodels.tsa.api import VAR
+import numpy as np
+import os
+
 
 
 
@@ -30,7 +33,6 @@ def pipeline(df):
 
     columns = pd.Series(df.columns) #On en fait une Série
     columns = df.columns[1:] #On enlève open_time
-    print(columns)
 
     for col in columns:
         ax.plot(df['open_time'],
@@ -42,7 +44,7 @@ def pipeline(df):
     ax.legend()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    fig.savefig("Spread_Crypto/figs/crypto_df.png")
+    fig.savefig("figs/crypto_df.png")
         
     #===================================
     log_symbols=[]
@@ -63,28 +65,25 @@ def pipeline(df):
     ax.legend()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    fig.savefig("Spread_Crypto/figs/crypto_log_df.png")
+    fig.savefig("figs/crypto_log_df.png")
 
     #===================================================================
     # Manual ADF and Automatic ADF on (log) - currencies
-
-    for ls in log_symbols:
-        aics = {}
-        log = df[ls]
-        print(f"\n=== {ls} ===")
-        for p in range(1, 16):
-            t, aic, n = adf_manuel(log, p) #boucle pour appliquer l'ADF manuel pour différents nombre de lags
-            aics[p] = aic #On remplit notre tableau d'AIC (pour pouvoir en tirer l'argmin notamment)
-            ref = adfuller(log.dropna(), maxlag=p, autolag=None, regression='c')[0] #On applique directement notre ADF automatique sur les colonnes log du df[]
-            print(f"p={p:2d}  t={t:7.3f}  refdf={ref:7.3f}  écart={abs(t-ref):.2e} AIC={aic:.2e} n={n}")
-        p_opt = min(aics, key=aics.get)
-        print(f'the number of diffs for {ls} that minimizes AIC is {p_opt}')
-    with open("Spread_Crypto/results/ADF_summary.txt", "w") as f:
+    with open("results/ADF_summary.txt", "w") as f:
+        for ls in log_symbols:
+            aics = {}
+            log = df[ls]
+            for p in range(1, 16):
+                t, aic, n = adf_manuel(log, p) #boucle pour appliquer l'ADF manuel pour différents nombre de lags
+                aics[p] = aic #On remplit notre tableau d'AIC (pour pouvoir en tirer l'argmin notamment)
+                ref = adfuller(log.dropna(), maxlag=p, autolag=None, regression='c')[0] #On applique directement notre ADF automatique sur les colonnes log du df[]
+            p_opt = min(aics, key=aics.get)
+        f.write(f'the number of diffs for {ls} that minimizes AIC is {p_opt}')
         f.write(str(ref))
 
     #===================================================================
     # Manual ADF and Automatic ADF on Diff - (log) - currencies
-    with open("Spread_Crypto/results/Diff_ADF_summary.txt", "w") as f:
+    with open("results/Diff_ADF_summary.txt", "w") as f:
         for ls in log_symbols:
             aics = {}
             log = df[ls]
@@ -100,7 +99,7 @@ def pipeline(df):
 
     #===================================================================
     # Automatic ADF on Res of regressions
-    with open("Spread_Crypto/results/Res_ADF.txt", "w") as f:
+    with open("results/Res_ADF.txt", "w") as f:
         for ls1 in log_symbols:
             for ls2 in log_symbols:
                 if ls1!=ls2:
@@ -110,7 +109,7 @@ def pipeline(df):
                     t_stat = adfuller(df[nom_colonne], maxlag=p, autolag='AIC', regression='n')[0] #On applique un ADF sur le résidu
                     f.write(f'{nom_colonne} has a t_value of {t_stat}\n')
     
-    with open("Spread_Crypto/results/p_value_Res_ADF.txt", "w") as f:
+    with open("results/p_value_Res_ADF.txt", "w") as f:
         for ls1 in log_symbols:
             for ls2 in log_symbols:
                 if ls1 != ls2:
@@ -127,7 +126,7 @@ def pipeline(df):
     max_lags = 20
     dim=len(log_symbols)
     # Boucle OLS
-    with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
+    with open("results/VAR(p).txt", "w") as f:
         for p in range(1, max_lags + 1):
             
             f.write(f"\n{'='*40}")
@@ -157,7 +156,7 @@ def pipeline(df):
 
     #===================================================
     # VAR representation : p_values
-    with open("Spread_Crypto/results/VAR(p)_p_values.txt", "w") as f:
+    with open("results/VAR(p)_p_values.txt", "w") as f:
 
         delta_columns=[f'Δ_{log_col}' for log_col in log_symbols]
         df_rendements = pd.DataFrame(delta_Y, columns=delta_columns)
@@ -173,17 +172,17 @@ def pipeline(df):
             f.write("="*40)
             f.write(f"La matrice des p_values pour {k} lags est\n")
             f.write("="*40)
-            f.write(matrice_pvalues)
+            f.write(str(matrice_pvalues))
             
             matrice_correlation = resultats.resid.corr()
             f.write("="*40)
             f.write(f"La matrice de corrélation pour {k} lags est\n")
             f.write("="*40)
-            f.write(matrice_correlation)
+            f.write(str(matrice_correlation))
 
     #===================================================
     # Selection_retards : p_values
-    with open("Spread_Crypto/results/Selection_retards.txt", "w") as f:
+    with open("results/Selection_retards.txt", "w") as f:
         
         selection_retards = modele.select_order(maxlags=20)
         f.write(str(selection_retards.summary()))
@@ -196,7 +195,7 @@ def pipeline(df):
     #On choisit le p qui minimise AIC
 
 
-    with open("Spread_Crypto/results/Granger_Test.txt", "w") as f:
+    with open("results/Granger_Test.txt", "w") as f:
         for ls1 in df_rendements.columns:
             for ls2 in df_rendements.columns:
                 if ls1 != ls2:
@@ -213,7 +212,7 @@ def pipeline(df):
     fig = irf.plot(orth=True) 
     fig.suptitle("Fonctions de Réponse Impulsionnelle (Chocs de Cholesky)", fontsize=16)
     fig.tight_layout()
-    fig.savefig("Spread_Crypto/figs/IRF.png")
+    fig.savefig("figs/IRF.png")
 
     #===================================================
     # IRF but with Bootstrap (Monte-Carlo)
@@ -226,7 +225,7 @@ def pipeline(df):
 
     fig.suptitle("IRF avec Intervalles de Confiance Bootstrap (1000 simulations)", fontsize=16)
     fig.tight_layout()
-    fig.savefig("Spread_Crypto/figs/IRF_BootStrapped.png")
+    fig.savefig("figs/IRF_BootStrapped.png")
 
 
     

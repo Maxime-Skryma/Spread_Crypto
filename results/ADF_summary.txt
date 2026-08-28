@@ -1,0 +1,1 @@
+the number of diffs for log_SOLUSDT that minimizes AIC is 1-1.7438786445413428
