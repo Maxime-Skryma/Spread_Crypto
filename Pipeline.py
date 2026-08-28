@@ -77,6 +77,8 @@ def pipeline(df):
             print(f"p={p:2d}  t={t:7.3f}  refdf={ref:7.3f}  écart={abs(t-ref):.2e} AIC={aic:.2e} n={n}")
         p_opt = min(aics, key=aics.get)
         print(f'the number of diffs for {ls} that minimizes AIC is {p_opt}')
+    with open("Spread_Crypto/results/ADF_summary.txt", "w") as f:
+    f.write(str(ref))
 
     #===================================================================
     # Manual ADF and Automatic ADF on Diff - (log) - currencies
@@ -90,4 +92,18 @@ def pipeline(df):
             ref = adfuller(log.dropna(), maxlag=p, autolag=None, regression='c')[0] #On applique directement notre ADF automatique sur les colonnes log du df[]
             print(f"p={p:2d}  t={t:7.3f}  refdf={ref:7.3f}  écart={abs(t-ref):.2e} AIC={aic:.2e} n={n}")
         p_opt = min(aics, key=aics.get)
-        print(f'the number of diffs for {ls} that minimizes AIC is {p_opt}')
+        print(f'the number of diffs for diff-{ls} that minimizes AIC is {p_opt}')
+    with open("Spread_Crypto/results/Diff_ADF_summary.txt", "w") as f:
+    
+
+    #===================================================================
+    # Automatic ADF on Res of regressions
+    with open("Spread_Crypto/results/Res_ADF.txt", "w") as f:
+    for ls1 in log_symbols:
+        for ls2 in log_symbols:
+            if ls1!=ls2:
+                resultats=sm.OLS(df[ls1],sm.add_constant(df[ls2])).fit() #Modèle OLS avec constante
+                df[f'Res of {ls1} on {ls2}']=resultats.resid #residuals of the OLS
+                nom_colonne = f'Res of {ls1} on {ls2}' #On stocke le nom de la colonne
+                t_stat = adfuller(df[nom_colonne], maxlag=p, autolag='AIC', regression='n')[0] #On applique un ADF sur le résidu
+                f.write(f'{nom_colonne} has a t_value of {t_stat}\n')
