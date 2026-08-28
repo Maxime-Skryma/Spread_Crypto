@@ -2,7 +2,9 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller
-from statsmodels.tsa.stattools import coint 
+from statsmodels.tsa.stattools import coint
+from statsmodels.tsa.api import VAR
+
 
 
 
@@ -119,7 +121,7 @@ def pipeline(df):
     
     #===================================================
     #VAR representation / Eigen Values / Modules
-    # with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
+    with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
     matrice_prix=df[log_symbols].to_numpy() 
     
     # Toutes les différences
@@ -154,3 +156,32 @@ def pipeline(df):
         eigen_values = np.linalg.eigvals(A)
         modules = np.abs(eigen_values)
         f.write(f"Modules des valeurs propres : {np.round(modules, 4)}")
+
+    #===================================================
+    # VAR representation : p_values
+    with open("Spread_Crypto/results/VAR(p)_p_values.txt", "w") as f:
+
+    delta_columns=[f'Δ_{log_col}' for log_col in log_symbols]
+    df_rendements = pd.DataFrame(delta_Y, columns=delta_columns)
+
+    modele = VAR(df_rendements)
+
+    p = 15
+                
+    for k in range(3,p+1):
+        resultats = modele.fit(k)
+        matrice_pvalues = resultats.pvalues
+
+        f.write("="*40)
+        f.write(f"La matrice des p_values pour {k} lags est")
+        f.write("="*40)
+        f.write(matrice_pvalues)
+        
+        matrice_correlation = resultats.resid.corr()
+        f.write("="*40)
+        f.write(f"La matrice de corrélation pour {k} lags est")
+        f.write("="*40)
+        f.write(matrice_correlation)
+
+
+        
