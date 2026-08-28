@@ -42,7 +42,6 @@ def pipeline(df):
     ax.legend()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    plt.show()
     fig.savefig("Spread_Crypto/figs/crypto_df.png")
         
     #===================================
@@ -64,7 +63,6 @@ def pipeline(df):
     ax.legend()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-    plt.show()
     fig.savefig("Spread_Crypto/figs/crypto_log_df.png")
 
     #===================================================================
@@ -183,5 +181,49 @@ def pipeline(df):
         f.write("="*40)
         f.write(matrice_correlation)
 
+    #===================================================
+    # Selection_retards : p_values
+    with open("Spread_Crypto/results/Selection_retards.txt", "w") as f:
+    
+    selection_retards = modele.select_order(maxlags=20)
+    f.write(str(selection_retards.summary()))
+
+    #===================================================
+    # Granger test on optimal p according to AIC
+    
+    with open("Spread_Crypto/results/Granger_Test.txt", "w") as f:
+    p = selection_retards.aic #On choisit le p qui minimise AIC
+
+    resultats = modele.fit(p)
+    for ls1 in df_rendements.columns:
+        for ls2 in df_rendements.columns:
+            if ls1 != ls2:
+                test_granger = resultats.test_causality(ls1,ls2, kind='f')
+                f.write(str(test_granger.summary()))
+    
+    #===================================================
+    # IRF
+    irf = resultats.irf(24) #analyse IRF sur 24h
+
+    fig = irf.plot(orth=True) 
+    fig.suptitle("Fonctions de Réponse Impulsionnelle (Chocs de Cholesky)", fontsize=16)
+    fig.tight_layout()
+    fig.savefig("Spread_Crypto/figs/IRF.png")
+
+    #===================================================
+    # IRF but with Bootstrap (Monte-Carlo)
+    fig = irf.plot(
+        orth=True, 
+        stderr_type='mc',  # 'mc' pour Monte-Carlo
+        repl=1000,         # Nombre de simulations : 1000
+        seed=42
+    )
+
+    fig.suptitle("IRF avec Intervalles de Confiance Bootstrap (1000 simulations)", fontsize=16)
+    fig.tight_layout()
+    fig.savefig("Spread_Crypto/figs/IRF_BootStrapped.png")
+
+
+    
 
         
