@@ -1,3 +1,4 @@
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import statsmodels.api as sm
@@ -24,7 +25,6 @@ def pipeline(df):
     #===================================
     # 1st Figure : Evolution of Currencies
     locator = mdates.AutoDateLocator()
-
 
     fig,ax=plt.subplots(figsize=(12,5))
 
@@ -80,46 +80,45 @@ def pipeline(df):
         p_opt = min(aics, key=aics.get)
         print(f'the number of diffs for {ls} that minimizes AIC is {p_opt}')
     with open("Spread_Crypto/results/ADF_summary.txt", "w") as f:
-    f.write(str(ref))
+        f.write(str(ref))
 
     #===================================================================
     # Manual ADF and Automatic ADF on Diff - (log) - currencies
-    for ls in log_symbols:
-        aics = {}
-        log = df[ls]
-        print(f"\n=== {ls} ===")
-        for p in range(1, 16):
-            t, aic, n = adf_manuel(log.diff(), p) #boucle pour appliquer l'ADF manuel pour différents nombre de lags
-            aics[p] = aic #On remplit notre tableau d'AIC (pour pouvoir en tirer l'argmin notamment)
-            ref = adfuller(log.dropna(), maxlag=p, autolag=None, regression='c')[0] #On applique directement notre ADF automatique sur les colonnes log du df[]
-            print(f"p={p:2d}  t={t:7.3f}  refdf={ref:7.3f}  écart={abs(t-ref):.2e} AIC={aic:.2e} n={n}")
-        p_opt = min(aics, key=aics.get)
-        print(f'the number of diffs for diff-{ls} that minimizes AIC is {p_opt}')
     with open("Spread_Crypto/results/Diff_ADF_summary.txt", "w") as f:
+        for ls in log_symbols:
+            aics = {}
+            log = df[ls]
+            f.write(f"\n=== {ls} ===\n")
+            for p in range(1, 16):
+                t, aic, n = adf_manuel(log.diff(), p) #boucle pour appliquer l'ADF manuel pour différents nombre de lags
+                aics[p] = aic #On remplit notre tableau d'AIC (pour pouvoir en tirer l'argmin notamment)
+                ref = adfuller(log.dropna(), maxlag=p, autolag=None, regression='c')[0] #On applique directement notre ADF automatique sur les colonnes log du df[]
+                f.write(f"p={p:2d}  t={t:7.3f}  refdf={ref:7.3f}  écart={abs(t-ref):.2e} AIC={aic:.2e} n={n}\n")
+            p_opt = min(aics, key=aics.get)
+            f.write(f'the number of lags for diff-{ls} that minimizes AIC is {p_opt}\n')
     
 
     #===================================================================
     # Automatic ADF on Res of regressions
     with open("Spread_Crypto/results/Res_ADF.txt", "w") as f:
-    for ls1 in log_symbols:
-        for ls2 in log_symbols:
-            if ls1!=ls2:
-                resultats=sm.OLS(df[ls1],sm.add_constant(df[ls2])).fit() #Modèle OLS avec constante
-                df[f'Res of {ls1} on {ls2}']=resultats.resid #residuals of the OLS
-                nom_colonne = f'Res of {ls1} on {ls2}' #On stocke le nom de la colonne
-                t_stat = adfuller(df[nom_colonne], maxlag=p, autolag='AIC', regression='n')[0] #On applique un ADF sur le résidu
-                f.write(f'{nom_colonne} has a t_value of {t_stat}\n')
+        for ls1 in log_symbols:
+            for ls2 in log_symbols:
+                if ls1!=ls2:
+                    resultats=sm.OLS(df[ls1],sm.add_constant(df[ls2])).fit() #Modèle OLS avec constante
+                    df[f'Res of {ls1} on {ls2}']=resultats.resid #residuals of the OLS
+                    nom_colonne = f'Res of {ls1} on {ls2}' #On stocke le nom de la colonne
+                    t_stat = adfuller(df[nom_colonne], maxlag=p, autolag='AIC', regression='n')[0] #On applique un ADF sur le résidu
+                    f.write(f'{nom_colonne} has a t_value of {t_stat}\n')
     
     with open("Spread_Crypto/results/p_value_Res_ADF.txt", "w") as f:
-    for ls1 in log_symbols:
-        for ls2 in log_symbols:
-            if ls1 != ls2:
-                _, pvalue, _= coint(df[ls1], df[ls2]) #we just want to keep p_values
-                f.write(f'{nom_colonne} has a t_value of {pvalue}\n')
+        for ls1 in log_symbols:
+            for ls2 in log_symbols:
+                if ls1 != ls2:
+                    _, pvalue, _= coint(df[ls1], df[ls2]) #we just want to keep p_values
+                    f.write(f'{nom_colonne} has a t_value of {pvalue}\n')
     
     #===================================================
     #VAR representation / Eigen Values / Modules
-    with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
     matrice_prix=df[log_symbols].to_numpy() 
     
     # Toutes les différences
@@ -128,79 +127,85 @@ def pipeline(df):
     max_lags = 20
     dim=len(log_symbols)
     # Boucle OLS
-    for p in range(1, max_lags + 1):
-        
-        f.write(f"\n{'='*40}")
-        f.write(f"ESTIMATION DU MODÈLE AVEC p = {p}")
-        f.write(f"{'='*40}")
-        
-        # On sacrifie 'p' jours
-        Y_t_1_niveaux = matrice_prix[p : -1]
-        Y_cible = delta_Y[p:]
-        
-        # On crée la liste des retards pour ce 'p'
-        liste_des_retards = [delta_Y[p-k : -k] for k in range(1, p + 1)]
-        
-        X_matrice = np.hstack([Y_t_1_niveaux] + liste_des_retards)
-        X_avec_constante = sm.add_constant(X_matrice)
-        
-        # OLS
-        coefficients_globaux, residus, rang, val_sing = np.linalg.lstsq(X_avec_constante, Y_cible, rcond=None)
-        
-        # Calcul des valeurs propres issues de la VECM
-        matrice_Pi_brute = coefficients_globaux[1:dim+1, :]
-        A = matrice_Pi_brute + np.eye(dim)
-        
-        eigen_values = np.linalg.eigvals(A)
-        modules = np.abs(eigen_values)
-        f.write(f"Modules des valeurs propres : {np.round(modules, 4)}")
+    with open("Spread_Crypto/results/VAR(p).txt", "w") as f:
+        for p in range(1, max_lags + 1):
+            
+            f.write(f"\n{'='*40}")
+            f.write(f"ESTIMATION DU MODÈLE AVEC p = {p}\n")
+            f.write(f"{'='*40}")
+            
+            # On sacrifie 'p' jours
+            Y_t_1_niveaux = matrice_prix[p : -1]
+            Y_cible = delta_Y[p:]
+            
+            # On crée la liste des retards pour ce 'p'
+            liste_des_retards = [delta_Y[p-k : -k] for k in range(1, p + 1)]
+            
+            X_matrice = np.hstack([Y_t_1_niveaux] + liste_des_retards)
+            X_avec_constante = sm.add_constant(X_matrice)
+            
+            # OLS
+            coefficients_globaux, residus, rang, val_sing = np.linalg.lstsq(X_avec_constante, Y_cible, rcond=None)
+            
+            # Calcul des valeurs propres issues de la VECM
+            matrice_Pi_brute = coefficients_globaux[1:dim+1, :]
+            A = matrice_Pi_brute + np.eye(dim)
+            
+            eigen_values = np.linalg.eigvals(A)
+            modules = np.abs(eigen_values)
+            f.write(f"Modules des valeurs propres : {np.round(modules, 4)}\n")
 
     #===================================================
     # VAR representation : p_values
     with open("Spread_Crypto/results/VAR(p)_p_values.txt", "w") as f:
 
-    delta_columns=[f'Δ_{log_col}' for log_col in log_symbols]
-    df_rendements = pd.DataFrame(delta_Y, columns=delta_columns)
+        delta_columns=[f'Δ_{log_col}' for log_col in log_symbols]
+        df_rendements = pd.DataFrame(delta_Y, columns=delta_columns)
 
-    modele = VAR(df_rendements)
+        modele = VAR(df_rendements)
 
-    p = 15
-                
-    for k in range(3,p+1):
-        resultats = modele.fit(k)
-        matrice_pvalues = resultats.pvalues
+        p = 15
+                    
+        for k in range(3,p+1):
+            resultats = modele.fit(k)
+            matrice_pvalues = resultats.pvalues
 
-        f.write("="*40)
-        f.write(f"La matrice des p_values pour {k} lags est")
-        f.write("="*40)
-        f.write(matrice_pvalues)
-        
-        matrice_correlation = resultats.resid.corr()
-        f.write("="*40)
-        f.write(f"La matrice de corrélation pour {k} lags est")
-        f.write("="*40)
-        f.write(matrice_correlation)
+            f.write("="*40)
+            f.write(f"La matrice des p_values pour {k} lags est\n")
+            f.write("="*40)
+            f.write(matrice_pvalues)
+            
+            matrice_correlation = resultats.resid.corr()
+            f.write("="*40)
+            f.write(f"La matrice de corrélation pour {k} lags est\n")
+            f.write("="*40)
+            f.write(matrice_correlation)
 
     #===================================================
     # Selection_retards : p_values
     with open("Spread_Crypto/results/Selection_retards.txt", "w") as f:
-    
-    selection_retards = modele.select_order(maxlags=20)
-    f.write(str(selection_retards.summary()))
+        
+        selection_retards = modele.select_order(maxlags=20)
+        f.write(str(selection_retards.summary()))
 
     #===================================================
     # Granger test on optimal p according to AIC
-    
-    with open("Spread_Crypto/results/Granger_Test.txt", "w") as f:
-    p = selection_retards.aic #On choisit le p qui minimise AIC
+  
+    p = selection_retards.aic
+    resultats = modele.fit(p) 
+    #On choisit le p qui minimise AIC
 
-    resultats = modele.fit(p)
-    for ls1 in df_rendements.columns:
-        for ls2 in df_rendements.columns:
-            if ls1 != ls2:
-                test_granger = resultats.test_causality(ls1,ls2, kind='f')
-                f.write(str(test_granger.summary()))
-    
+
+    with open("Spread_Crypto/results/Granger_Test.txt", "w") as f:
+        for ls1 in df_rendements.columns:
+            for ls2 in df_rendements.columns:
+                if ls1 != ls2:
+                    test_granger = resultats.test_causality(ls1,ls2, kind='f')
+                    f.write(f"Granger Test of {ls1} on {ls2}\n")
+                    f.write("="*40)
+                    f.write(str(test_granger.summary()))
+
+
     #===================================================
     # IRF
     irf = resultats.irf(24) #analyse IRF sur 24h
