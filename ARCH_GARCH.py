@@ -204,10 +204,10 @@ def AR_GARCH(n,phi0,phi1,alpha0,alpha1,beta0):
     return epsilon,actif
 
 
-def log_vraisemblance_GARCH(zeta, actif):
-    phi0, phi1, alpha0, alpha1, beta0 = zeta
+def log_vraisemblance_GARCH(zeta, actif): 
+    phi0, phi1, alpha0, alpha1, beta0 , y = zeta
 
-    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0) >= 1 or abs(phi1) >= 1:
+    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0+ y/2) >= 1 or abs(phi1) >= 1 or v <= 2.001:
         return 1e10
 
     T = len(actif)
@@ -249,11 +249,11 @@ def opti_AR_GARCH(log_vraisemblance_GARCH,parametres_initiaux,actif):
 
 
 
-def log_vraisemblance_GARCH_student(zeta, actif):
-    phi0, phi1, alpha0, alpha1, beta0, v = zeta
+def log_vraisemblance_GARCH_student(zeta, actif): #On la modifie pour pouvoir y mettre 'y'
+    phi0, phi1, alpha0, alpha1, beta0, v , y = zeta
 
     #on doit avoir au moins 2 degrés de libertés, doù le fait qu'on ajoute cette condition
-    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0) >= 1 or abs(phi1) >= 1 or v <= 2.001:
+    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0+ y/2) >= 1 or abs(phi1) >= 1 or v <= 2.001:
         return 1e10
 
     T = len(actif)
@@ -272,7 +272,8 @@ def log_vraisemblance_GARCH_student(zeta, actif):
     cst_student = gammaln((v + 1) / 2) - gammaln(v / 2) - 0.5 * np.log(np.pi * (v - 2)) #pre-calcul de la constante gamma, éviter trop de calcul
     
     for t in range(1, T):
-        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 # maj de la variance avec eps
+        I_t = 1 if eps[t-1] < 0 else 0
+        sigma2_t = y*(eps[t-1]**2)*I_t + alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 # maj de la variance avec eps
         
         log_v += cst_student - 0.5 * np.log(sigma2_t) - 0.5 * (v + 1) * np.log(1 + (eps[t]**2) / ((v - 2) * sigma2_t)) #on input
         
