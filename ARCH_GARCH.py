@@ -172,3 +172,80 @@ def simulate_GARCH(n, alpha0, alpha1, beta0):
     return eps, sigma_carre
 
     #sigma_carre est la vol conditionelle
+
+def AR_GARCH(n,phi0,phi1,alpha0,alpha1,beta0):
+    
+    if abs(phi1) >= 1:
+        raise ValueError("Paramètre AR invalide : le processus n'est pas stationnaire en moyenne.")
+    
+    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0:
+        raise ValueError("Les paramètres doivent être strictement positifs pour garantir une variance > 0.")
+    if alpha1 + beta0 >= 1:
+        raise ValueError("Le processus n'est pas stationnaire (alpha1 + beta0 >= 1). La variance va exploser.")
+
+    epsilon, vol_conditionnelle = simulate_GARCH(n, alpha0, alpha1, beta0)
+
+    actif = np.zeros(n)
+
+    actif[0] = (phi0 / (1 - phi1)) + epsilon[0] #premier instant + choc
+
+    for k in range(1, n):
+        actif[k] = phi0 + phi1 * actif[k-1] + epsilon[k]
+
+    print(f'AR(1)-GARCH(1) sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1})')
+    plt.figure(figsize=(8, 5))
+    plt.plot(actif)
+    plt.title('AR(1)-GARCH(1)')
+    plt.xlabel('Temps')
+    plt.ylabel('Rt')
+    plt.show()
+
+    return epsilon,actif
+
+
+def log_vraisemblance_GARCH(zeta, actif):
+    phi0, phi1, alpha0, alpha1, beta0 = zeta
+
+    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0) >= 1 or abs(phi1) >= 1:
+        return 1e10
+
+    T = len(actif)
+    
+    eps = np.zeros(T)
+    eps[0] = actif[0] - (phi0 / (1 - phi1)) # Choc inconditionnel initial
+
+    for t in range(1, T):
+        eps[t] = actif[t] - phi0 - phi1 * actif[t-1] #permet de calculer tous les epsilons 
+
+    # 4. Initialisation de la variance conditionnelle
+    sigma2_t_minus_1 = np.var(actif)
+    
+    log_v = 0
+    
+    # 5. Boucle temporelle propre (de t=1 à T-1)
+    for t in range(1, T):
+        # Mise à jour de la variance avec le choc t-1
+        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1
+        
+        # Calcul de la log-densité à l'instant t
+        log_v += -0.5 * np.log(2 * np.pi) - 0.5 * np.log(sigma2_t) - (eps[t]**2) / (2 * sigma2_t)
+        
+        # Préparation du relais temporel
+        sigma2_t_minus_1 = sigma2_t
+    
+    return -log_v
+
+
+def opti_AR_GARCH(log_vraisemblance_GARCH,parametres_initiaux,actif):
+
+    resultat_optimisation = minimize(
+        fun=log_vraisemblance_GARCH, 
+        x0=parametres_initiaux, 
+        args=(actif,), 
+        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+    )
+
+    phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt  = resultat_optimisation.x
+    print(f"Paramètres optimaux : {resultat_optimisation.x}")
+    print(f"Succès de la convergence : {resultat_optimisation.success}")
+    return phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt
