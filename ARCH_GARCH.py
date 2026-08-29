@@ -142,7 +142,7 @@ def opti_AR_ARCH(log_vraisemblance,parametres_initiaux,actif):
         fun=log_vraisemblance, 
         x0=parametres_initiaux, 
         args=(actif), 
-        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+        method='Nelder-Mead' 
     )
 
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt = resultat_optimisation.x
@@ -223,7 +223,9 @@ def log_vraisemblance_GARCH(zeta, actif):
     log_v = 0
     
     for t in range(1, T):
-        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 #maj de la variance avec eps
+        I_t = 1 if eps[t-1] < 0 else 0
+
+        sigma2_t = y*(eps[t-1]**2)*I_t + alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 #maj de la variance avec eps
         
         log_v += -0.5 * np.log(2 * np.pi) - 0.5 * np.log(sigma2_t) - (eps[t]**2) / (2 * sigma2_t) #On input
         
@@ -238,7 +240,7 @@ def opti_AR_GARCH(log_vraisemblance_GARCH,parametres_initiaux,actif):
         fun=log_vraisemblance_GARCH, 
         x0=parametres_initiaux, 
         args=(actif,), 
-        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+        method='Nelder-Mead' 
     )
 
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt  = resultat_optimisation.x
@@ -288,7 +290,7 @@ def opti_AR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiaux,ac
         fun=log_vraisemblance_GARCH_student, 
         x0=parametres_initiaux, 
         args=(actif), 
-        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+        method='Nelder-Mead'
     )
 
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt , v_opt = resultat_optimisation.x
@@ -391,7 +393,7 @@ def opti_AR_GJR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiau
         fun=log_vraisemblance_GJR_GARCH_student, 
         x0=parametres_initiaux, 
         args=(actif), 
-        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+        method='Nelder-Mead' 
     )
 
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt , v_opt, y_opt = resultat_optimisation.x
