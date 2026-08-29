@@ -5,6 +5,7 @@ from numpy.polynomial import Polynomial
 from scipy.linalg import toeplitz
 from statsmodels.tsa.arima_process import ArmaProcess
 from scipy.optimize import minimize
+from scipy.special import gammaln
 
 def simulate_ARCH(n,alpha0,alpha1):
     x=0
@@ -244,3 +245,52 @@ def opti_AR_GARCH(log_vraisemblance_GARCH,parametres_initiaux,actif):
     print(f"Paramètres optimaux : {resultat_optimisation.x}")
     print(f"Succès de la convergence : {resultat_optimisation.success}")
     return phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt
+
+
+
+
+def log_vraisemblance_GARCH_student(zeta, actif):
+    phi0, phi1, alpha0, alpha1, beta0, v = zeta
+
+    #on doit avoir au moins 2 degrés de libertés, doù le fait qu'on ajoute cette condition
+    if alpha0 <= 0 or alpha1 < 0 or beta0 < 0 or (alpha1 + beta0) >= 1 or abs(phi1) >= 1 or v <= 2.001:
+        return 1e10
+
+    T = len(actif)
+    
+    eps = np.zeros(T)
+    eps[0] = actif[0] - (phi0 / (1 - phi1)) # Choc inconditionnel initial
+
+    for t in range(1, T):
+        eps[t] = actif[t] - phi0 - phi1 * actif[t-1] # permet de calculer tous les epsilons 
+
+    sigma2_t_minus_1 = np.var(actif) # init variance conditionelle
+    
+    log_v = 0
+    
+    #on utilise gammaln sinon trop coûteux à calculer
+    cst_student = gammaln((v + 1) / 2) - gammaln(v / 2) - 0.5 * np.log(np.pi * (v - 2)) #pre-calcul de la constante gamma, éviter trop de calcul
+    
+    for t in range(1, T):
+        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 # maj de la variance avec eps
+        
+        log_v += cst_student - 0.5 * np.log(sigma2_t) - 0.5 * (v + 1) * np.log(1 + (eps[t]**2) / ((v - 2) * sigma2_t)) #on input
+        
+        sigma2_t_minus_1 = sigma2_t
+    
+    return -log_v
+
+
+def opti_AR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiaux,actif):
+
+    resultat_optimisation = minimize(
+        fun=log_vraisemblance_GARCH, 
+        x0=parametres_initiaux, 
+        args=(actif,), 
+        method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
+    )
+
+    phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt , v_opt = resultat_optimisation.x
+    print(f"Paramètres optimaux : {resultat_optimisation.x}")
+    print(f"Succès de la convergence : {resultat_optimisation.success}")
+    return phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt, v_opt
