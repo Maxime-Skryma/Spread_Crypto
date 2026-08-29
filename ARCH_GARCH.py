@@ -286,7 +286,7 @@ def opti_AR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiaux,ac
     resultat_optimisation = minimize(
         fun=log_vraisemblance_GARCH, 
         x0=parametres_initiaux, 
-        args=(actif,), 
+        args=(actif), 
         method='Nelder-Mead' # Algorithme robuste qui ne nécessite pas de gradient parfait
     )
 
