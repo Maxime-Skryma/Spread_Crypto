@@ -343,9 +343,9 @@ def AR_GARCH_student(n,phi0,phi1,alpha0,alpha1,beta0,v):
     print(f'AR(1)-GARCH(1) with Zt suivant une loi de Student sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1})')
     plt.figure(figsize=(8, 5))
     plt.plot(actif)
-    plt.title('AR(1)-GARCH(1)')
+    plt.title('AR(1)-GARCH(1)-Student-Law')
     plt.xlabel('Temps')
-    plt.ylabel('Rt')
+    plt.ylabel('Log-Rendement-Actif')
     plt.show()
 
     return epsilon,actif
