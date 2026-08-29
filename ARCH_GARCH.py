@@ -94,7 +94,7 @@ def AR(p,sigma,n):
     plt.show()
     print('racines inverses : ',racines) 
 
-    def AR_ARCH(n,phi0,phi1,alpha0,alpha1):
+def AR_ARCH(n,phi0,phi1,alpha0,alpha1):
     if abs(phi1) >= 1:
         raise ValueError("Paramètre AR invalide : le processus n'est pas stationnaire en moyenne.")
     
@@ -119,7 +119,7 @@ def AR(p,sigma,n):
 
     return epsilon,mu,actif
 
-    def log_vraisemblance(theta,actif):
+def log_vraisemblance(theta,actif):
     T=len(actif)
     [phi0,phi1,alpha0,alpha1]=theta
 
