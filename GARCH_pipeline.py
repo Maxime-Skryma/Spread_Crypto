@@ -58,7 +58,8 @@ def AR_GJR_GARCH_student(n,phi0,phi1,alpha0,alpha1,beta0,v,y,loi):
     for k in range(1, n):
         actif[k] = phi0 + phi1 * actif[k-1] + epsilon[k]
 
-    print(f'AR(1)-GJR_GARCH(1) with Zt suivant une loi de Student sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1})')
+
+    print(f'Sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1}, beta0 = {beta0}, v={v}, y={y}, loi={loi},')
     plt.figure(figsize=(8, 5))
     plt.plot(actif)
     plt.title('AR(1)-GJR_GARCH(1)-Student-Law')
@@ -75,10 +76,10 @@ def likelihood(zeta, actif,loi):
     if loi=='normal':
         return log_vraisemblance_GARCH(zeta, actif) #les appelations doivent être changés, ambiguité
     else:
-        return log_vraisemblance_GJR_GARCH_student(zeta, actif):
+        return log_vraisemblance_GJR_GARCH_student(zeta, actif)
 
 
-def opti_AR_GJR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiaux,actif,loi):
+def opti_AR_GJR_GARCH_student(parametres_initiaux,actif,loi):
     if loi=='normal':
         resultat_optimisation = minimize(
             fun=log_vraisemblance_GARCH, 
@@ -93,9 +94,8 @@ def opti_AR_GJR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiau
             args=(actif), 
             method='Nelder-Mead' 
         )
-    phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt , v_opt, y_opt = resultat_optimisation.x
+    
     print(f"Paramètres optimaux : {resultat_optimisation.x}")
     print(f"Succès de la convergence : {resultat_optimisation.success}")
-    return phi0_opt, phi1_opt, alpha0_opt, alpha1_opt, beta0_opt, v_opt, y_opt
 
 
