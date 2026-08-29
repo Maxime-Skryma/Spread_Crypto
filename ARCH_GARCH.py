@@ -109,10 +109,10 @@ def AR_ARCH(n,phi0,phi1,alpha0,alpha1):
     epsilon=np.array(epsilon)
     mu=np.array(mu)
     actif=epsilon+mu
-
+    print(f'AR(1)-ARCH(1) sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1})')
     plt.figure(figsize=(8, 5))
     plt.plot(actif)
-    plt.title(f'AR(1)-ARCH(1) sur {n} périodes avec comme paramètres θ= (phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1})')
+    plt.title('AR(1)-ARCH(1)')
     plt.xlabel('Temps')
     plt.ylabel('Rt')
     plt.show()
@@ -147,6 +147,7 @@ def opti_AR_ARCH(log_vraisemblance,parametres_initiaux,actif):
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt = resultat_optimisation.x
     print(f"Paramètres optimaux : {resultat_optimisation.x}")
     print(f"Succès de la convergence : {resultat_optimisation.success}")
+    return phi0_opt, phi1_opt, alpha0_opt, alpha1_opt = resultat_optimisation.x
 
 def simulate_GARCH(n, alpha0, alpha1, beta0):
     if alpha0 <= 0 or alpha1 < 0 or beta0 < 0:
