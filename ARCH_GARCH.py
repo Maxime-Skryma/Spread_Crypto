@@ -217,20 +217,15 @@ def log_vraisemblance_GARCH(zeta, actif):
     for t in range(1, T):
         eps[t] = actif[t] - phi0 - phi1 * actif[t-1] #permet de calculer tous les epsilons 
 
-    # 4. Initialisation de la variance conditionnelle
-    sigma2_t_minus_1 = np.var(actif)
+    sigma2_t_minus_1 = np.var(actif) #init variance conditionelle : on considère ici la variance empirique de nos données
     
     log_v = 0
     
-    # 5. Boucle temporelle propre (de t=1 à T-1)
     for t in range(1, T):
-        # Mise à jour de la variance avec le choc t-1
-        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1
+        sigma2_t = alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 #maj de la variance avec eps
         
-        # Calcul de la log-densité à l'instant t
-        log_v += -0.5 * np.log(2 * np.pi) - 0.5 * np.log(sigma2_t) - (eps[t]**2) / (2 * sigma2_t)
+        log_v += -0.5 * np.log(2 * np.pi) - 0.5 * np.log(sigma2_t) - (eps[t]**2) / (2 * sigma2_t) #On input
         
-        # Préparation du relais temporel
         sigma2_t_minus_1 = sigma2_t
     
     return -log_v
