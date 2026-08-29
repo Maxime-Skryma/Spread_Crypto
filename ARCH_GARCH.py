@@ -350,7 +350,6 @@ def AR_GARCH_student(n,phi0,phi1,alpha0,alpha1,beta0,v):
 
     return epsilon,actif
 
-----
 
 def log_vraisemblance_GJR_GARCH_student(zeta, actif):
     phi0, phi1, alpha0, alpha1, beta0, v , y = zeta
@@ -376,7 +375,7 @@ def log_vraisemblance_GJR_GARCH_student(zeta, actif):
     
     for t in range(1, T):
         I_t = 1 if eps[t-1] < 0 else 0
-        sigma2_t = y*(eps[t-1]**2)*I_k + alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 # maj de la variance avec eps
+        sigma2_t = y*(eps[t-1]**2)*I_t + alpha0 + alpha1 * (eps[t-1]**2) + beta0 * sigma2_t_minus_1 # maj de la variance avec eps
         
         log_v += cst_student - 0.5 * np.log(sigma2_t) - 0.5 * (v + 1) * np.log(1 + (eps[t]**2) / ((v - 2) * sigma2_t)) #on input
         
@@ -401,7 +400,7 @@ def opti_AR_GJR_GARCH_student(log_vraisemblance_GARCH_student,parametres_initiau
 
 
 
-def simulate_GARCH_student(n, alpha0, alpha1, beta0,v,y):
+def simulate_GJR_GARCH_student(n, alpha0, alpha1, beta0,v,y):
     if alpha0 <= 0 or alpha1 < 0 or beta0 < 0:
         raise ValueError("Les paramètres doivent être strictement positifs pour garantir une variance > 0.")
     if alpha1 + beta0 + y/2 >= 1:
@@ -450,6 +449,7 @@ def AR_GJR_GARCH_student(n,phi0,phi1,alpha0,alpha1,beta0,v,y):
     plt.figure(figsize=(8, 5))
     plt.plot(actif)
     plt.title('AR(1)-GJR_GARCH(1)-Student-Law')
+    plt.ylim(-0.06,0.06)
     plt.xlabel('Temps')
     plt.ylabel('Log-Rendement-Actif')
     plt.show()
