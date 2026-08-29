@@ -147,8 +147,6 @@ def opti_AR_ARCH(log_vraisemblance,parametres_initiaux,actif):
     phi0_opt, phi1_opt, alpha0_opt, alpha1_opt = resultat_optimisation.x
     print(f"Paramètres optimaux : {resultat_optimisation.x}")
     print(f"Succès de la convergence : {resultat_optimisation.success}")
-    print(f"Les vrais paramètres sont phi0 = {phi0}, phi1 = {phi1}, alpha0 = {alpha0}, alpha1 = {alpha1}")
-
 
 def simulate_GARCH(n, alpha0, alpha1, beta0):
     if alpha0 <= 0 or alpha1 < 0 or beta0 < 0:
