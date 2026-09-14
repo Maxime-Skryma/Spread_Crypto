@@ -1028,7 +1028,7 @@ def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
     if not np.isfinite(nll):
         return 1e10
 
-return nll
+    return nll
 
 def fit_bivariate_sum_exp(df,
                           theta_init,
