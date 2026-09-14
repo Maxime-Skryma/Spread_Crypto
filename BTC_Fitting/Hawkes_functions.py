@@ -839,3 +839,108 @@ if __name__ == "__main__":
 
     # ----- Bivariate pass-rate loop (cell 29) -----
     pass_rate_bivariate(n_sim=10)
+
+
+
+def pass_rate_windows(windows,
+                      theta_init=None,
+                      bounds=None,
+                      constraints=None,
+                      verbose=True):
+
+    if bounds is None:
+        bounds = _default_bivariate_bounds()
+
+    if constraints is None:
+        constraints = [
+            NonlinearConstraint(spectral_det, 1e-5, np.inf),
+            NonlinearConstraint(trace_1, 1e-5, np.inf),
+            NonlinearConstraint(trace_2, 1e-5, np.inf)
+        ]
+
+    # accept a dict or a list of DataFrames
+    dfs = list(windows.values()) if isinstance(windows, dict) else list(windows)
+
+    # counters
+    count_ks_1, count_ks_2 = 0, 0
+    count_lb_1, count_lb_2 = 0, 0
+    count_er_1, count_er_2 = 0, 0
+    count_joint_1, count_joint_2 = 0, 0
+    count_global_joint = 0
+
+    taille = len(dfs)
+
+    for current_df in dfs:
+
+        # per-window data-driven init (unless one was passed explicitly)
+        if theta_init is None:
+            t_w = current_df['time_stamp'].to_numpy()
+            side_w = current_df['side'].to_numpy()
+            T_w = t_w[-1]
+            N1 = side_w.sum(); N2 = len(side_w) - N1
+            dt_mean = np.mean(np.diff(t_w))
+            theta_start = np.array([
+                (N1 / T_w) * 0.3, (N2 / T_w) * 0.3,
+                0.3, 0.1, 0.1, 0.3,
+                1.0 / (5 * dt_mean), 1.0 / (5 * dt_mean),
+            ])
+        else:
+            theta_start = theta_init
+
+        # fit on the window
+        resultat = minimize(
+            fun=neg_log_likelihood_bivariate,
+            x0=theta_start,
+            args=(current_df,),
+            method='trust-constr',
+            bounds=bounds,
+            constraints=constraints,
+            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
+        )
+
+        u1, u2 = hawkes_residuals_bivariate(resultat.x, current_df)
+
+        # Dim 1 (Buys)
+        _, ks_pval_1 = kstest(u1, 'expon')
+        lb_pval_1 = acorr_ljungbox(u1, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
+        _, _, er_pval_1 = engle_russell_ed_test(u1)
+        pass_ks_1 = ks_pval_1 > 0.05
+        pass_lb_1 = lb_pval_1 > 0.05
+        pass_er_1 = er_pval_1 > 0.05
+        if pass_ks_1: count_ks_1 += 1
+        if pass_lb_1: count_lb_1 += 1
+        if pass_er_1: count_er_1 += 1
+        if pass_ks_1 and pass_lb_1 and pass_er_1: count_joint_1 += 1
+
+        # Dim 2 (Sells)
+        _, ks_pval_2 = kstest(u2, 'expon')
+        lb_pval_2 = acorr_ljungbox(u2, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
+        _, _, er_pval_2 = engle_russell_ed_test(u2)
+        pass_ks_2 = ks_pval_2 > 0.05
+        pass_lb_2 = lb_pval_2 > 0.05
+        pass_er_2 = er_pval_2 > 0.05
+        if pass_ks_2: count_ks_2 += 1
+        if pass_lb_2: count_lb_2 += 1
+        if pass_er_2: count_er_2 += 1
+        if pass_ks_2 and pass_lb_2 and pass_er_2: count_joint_2 += 1
+
+        # Strict global
+        if (pass_ks_1 and pass_lb_1 and pass_er_1) and (pass_ks_2 and pass_lb_2 and pass_er_2):
+            count_global_joint += 1
+
+    if verbose:
+        print(f"\n--- PASS RATE RESULTS (out of {taille} windows) ---")
+        print("\n[Dimension 1 - Buys]")
+        print(f"KS : {(count_ks_1 / taille) * 100:.2f}% | LB : {(count_lb_1 / taille) * 100:.2f}% | ED : {(count_er_1 / taille) * 100:.2f}%")
+        print(f"Joint 1 : {(count_joint_1 / taille) * 100:.2f}%")
+        print("\n[Dimension 2 - Sells]")
+        print(f"KS : {(count_ks_2 / taille) * 100:.2f}% | LB : {(count_lb_2 / taille) * 100:.2f}% | ED : {(count_er_2 / taille) * 100:.2f}%")
+        print(f"Joint 2 : {(count_joint_2 / taille) * 100:.2f}%")
+        print("\n[Global Bivariate Model]")
+        print(f"Strict Validation (Intersection of all 6 tests) : {(count_global_joint / taille) * 100:.2f}%")
+
+    return {
+        "ks_1": count_ks_1, "lb_1": count_lb_1, "er_1": count_er_1, "joint_1": count_joint_1,
+        "ks_2": count_ks_2, "lb_2": count_lb_2, "er_2": count_er_2, "joint_2": count_joint_2,
+        "global_joint": count_global_joint, "taille": taille,
+    }
