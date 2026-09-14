@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.optimize import brentq
-from scipy.optimize import minimize, NonlinearConstraint
+from scipy.optimize import minimize, NonlinearConstraint,LinearConstraint
 from scipy.stats import norm
 
 from scipy.stats import kstest, expon
@@ -944,3 +944,278 @@ def pass_rate_windows(windows,
         "ks_2": count_ks_2, "lb_2": count_lb_2, "er_2": count_er_2, "joint_2": count_joint_2,
         "global_joint": count_global_joint, "taille": taille,
     }
+
+
+
+
+def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
+
+
+    #We now have 14 parameters
+    mu1, mu2, R11_1 , R21_1, R12_1, R22_1 , R11_2 , R21_2, R12_2, R22_2, beta1_1, beta2_1, beta1_2, beta2_2 = theta_sum
+
+    
+    gamma11_1 = R11_1 * beta1_1
+    gamma21_1 = R21_1 * beta1_1
+    gamma12_1 = R12_1 * beta2_1
+    gamma22_1 = R22_1 * beta2_1
+
+    gamma11_2 = R11_2 * beta1_2
+    gamma21_2 = R21_2 * beta1_2
+    gamma12_2 = R12_2 * beta2_2
+    gamma22_2 = R22_2 * beta2_2
+
+    #time_stamp and order type
+    time_stamp = df['time_stamp'].to_numpy()
+    side = df['side'].to_numpy()
+
+    k=len(time_stamp)
+    
+    S1_1 = np.zeros(k+1)
+    S2_1 = np.zeros(k+1)
+
+    S1_2 = np.zeros(k+1)
+    S2_2 = np.zeros(k+1)
+
+    N1=side.sum()
+    N2=k-N1
+
+
+    first_sum=np.log(np.where(side[0]==1, mu1, mu2))
+
+    # First sum
+    for i in range(1,k):
+        S1_1[i]=(side[i-1] + S1_1[i-1])*np.exp(-beta1_1*(time_stamp[i]-time_stamp[i-1]))
+        
+        S2_1[i]=((1-side[i-1]) + S2_1[i-1])*np.exp(-beta2_1*(time_stamp[i]-time_stamp[i-1]))
+
+        S1_2[i]=(side[i-1] + S1_2[i-1])*np.exp(-beta1_2*(time_stamp[i]-time_stamp[i-1]))
+        
+        S2_2[i]=((1-side[i-1]) + S2_2[i-1])*np.exp(-beta2_2*(time_stamp[i]-time_stamp[i-1]))
+
+        if side[i]==1: 
+            first_sum+=np.log( mu1 + gamma11_1*S1_1[i] + gamma12_1*S2_1[i] + gamma11_2*S1_2[i] + gamma12_2*S2_2[i])
+        else:
+            first_sum+=np.log( mu2 + gamma21_1*S1_1[i] + gamma22_1*S2_1[i] + gamma21_2*S1_2[i] + gamma22_2*S2_2[i])
+
+
+
+    # Second sum
+
+    last_time=time_stamp[k-1] 
+
+    S1_1[k] = side[k-1] + S1_1[k-1]
+        
+    S2_1[k] = (1-side[k-1]) + S2_1[k-1]
+
+    S1_2[k] = side[k-1] + S1_2[k-1]
+        
+    S2_2[k] = (1-side[k-1]) + S2_2[k-1]
+
+
+    Re1_1 = N1 - S1_1[k]
+    Re2_1 = N2 - S2_1[k]  
+
+    Re1_2 = N1 - S1_2[k]
+    Re2_2 = N2 - S2_2[k]  
+
+    second_sum = (R11_1 + R21_1)*Re1_1 + (R12_1 + R22_1)*Re2_1 + (R11_2 + R21_2)*Re1_2 + (R12_2 + R22_2)*Re2_2
+
+
+    return -(first_sum - (mu1+mu2)*last_time - second_sum)
+
+
+
+def fit_bivariate_sum_exp(df,
+                          theta_init,
+                          verbose=True):
+    
+
+    
+    bounds_sum = (
+    (1e-5, None),   # 0: mu1 > 0
+    (1e-5, None),   # 1: mu2 > 0
+    (0.0, 1.0),     # 2: R11_1
+    (0.0, 1.0),     # 3: R21_1
+    (0.0, 1.0),     # 4: R12_1
+    (0.0, 1.0),     # 5: R22_1
+    (0.0, 1.0),     # 6: R11_2
+    (0.0, 1.0),     # 7: R21_2
+    (0.0, 1.0),     # 8: R12_2
+    (0.0, 1.0),     # 9: R22_2
+    (1e-3, 500.0),  # 10: beta1_1
+    (1e-3, 500.0),  # 11: beta2_1
+    (1e-3, 3000.0),  # 12: beta1_2
+    (1e-3, 3000.0)   # 13: beta2_2
+    )
+
+    def spectral_det_sum(theta):
+        r11 = theta[2] + theta[6]
+        r21 = theta[3] + theta[7]
+        r12 = theta[4] + theta[8]
+        r22 = theta[5] + theta[9]
+        # det(I - R) > 0 <=> (1 - r11)(1 - r22) - r12 * r21 > 0
+        return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
+
+    
+    # 4 linear constraints (2 traces + 2 beta orderings) packed into a matrix
+    A = np.zeros((4, 14))
+    A[0, 2] = 1.0;  A[0, 6] = 1.0       # R11_1 + R11_2 <= 1 - eps
+    A[1, 5] = 1.0;  A[1, 9] = 1.0       # R22_1 + R22_2 <= 1 - eps
+    A[2, 12] = 1.0; A[2, 10] = -1.0     # beta1_2 - beta1_1 >= 1e-3
+    A[3, 13] = 1.0; A[3, 11] = -1.0     # beta2_2 - beta2_1 >= 1e-3
+    lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
+    ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
+
+    constraints = [
+        LinearConstraint(A, lb, ub),
+        NonlinearConstraint(spectral_det_sum, 1e-5, np.inf),
+    ]
+
+    resultat = minimize(
+        fun=neg_log_likelihood_bivariate_sum_exp,
+        x0=theta_init,
+        args=(df,),
+        method='trust-constr',
+        bounds=bounds_sum,
+        constraints=constraints,
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': True}
+    )
+
+    if verbose:
+        x = resultat.x
+        print("\n--- Bivariate Sum-Exp : Estimated results ---")
+        print(f"Succès de l'optimisation : {resultat.success}")
+        print(f"Statut                   : {resultat.message}")
+
+        print("\n[Baseline intensity - mu]")
+        print(f"mu1 (Dimension 1) : {x[0]:.6f}")
+        print(f"mu2 (Dimension 2) : {x[1]:.6f}")
+
+        r11 = x[2] + x[6]
+        r21 = x[3] + x[7]
+        r12 = x[4] + x[8]
+        r22 = x[5] + x[9]
+        print("\n[Branchement ratio total - R = R^(1) + R^(2)]")
+        print(f"R11 (Auto 1->1)   : {r11:.4f}  (comp1 {x[2]:.4f}, comp2 {x[6]:.4f})")
+        print(f"R21 (Croisée 1->2): {r21:.4f}  (comp1 {x[3]:.4f}, comp2 {x[7]:.4f})")
+        print(f"R12 (Croisée 2->1): {r12:.4f}  (comp1 {x[4]:.4f}, comp2 {x[8]:.4f})")
+        print(f"R22 (Auto 2->2)   : {r22:.4f}  (comp1 {x[5]:.4f}, comp2 {x[9]:.4f})")
+
+        rho = np.max(np.abs(np.linalg.eigvals(np.array([[r11, r12], [r21, r22]]))))
+        print(f"Rayon spectral    : {rho:.4f} (doit être < 1)")
+
+        print("\n[beta]")
+        print(f"Source 1 (Buy)  : beta^(1) = {x[10]:.4f} | beta^(2) = {x[12]:.4f}")
+        print(f"Source 2 (Sell) : beta^(1) = {x[11]:.4f} | beta^(2) = {x[13]:.4f}")
+
+        print("\n[gamma = R * beta]")
+        print("--- Composante 1 ---")
+        print(f"gamma11_1 : {x[2]*x[10]:.4f} | gamma21_1 : {x[3]*x[10]:.4f}")
+        print(f"gamma12_1 : {x[4]*x[11]:.4f} | gamma22_1 : {x[5]*x[11]:.4f}")
+        print("--- Composante 2 ---")
+        print(f"gamma11_2 : {x[6]*x[12]:.4f} | gamma21_2 : {x[7]*x[12]:.4f}")
+        print(f"gamma12_2 : {x[8]*x[13]:.4f} | gamma22_2 : {x[9]*x[13]:.4f}")
+
+    return resultat
+
+
+def hawkes_residuals_bivariate_sum_exp(theta_sum, df):
+
+    # 14 parameters (same layout as the sum-exp likelihood)
+    mu1, mu2, R11_1, R21_1, R12_1, R22_1, R11_2, R21_2, R12_2, R22_2, \
+        beta1_1, beta2_1, beta1_2, beta2_2 = theta_sum
+
+    time_stamp = df.iloc[:, 0].to_numpy()
+    side = df.iloc[:, 1].to_numpy()
+    k = len(time_stamp)
+
+    # 4 states : source (1=buy, 2=sell) x scale (1, 2)
+    S1_1 = np.zeros(k)
+    S2_1 = np.zeros(k)
+    S1_2 = np.zeros(k)
+    S2_2 = np.zeros(k)
+
+    # cumulative counts
+    N1 = np.zeros(k)
+    N2 = np.zeros(k)
+
+    Lambda1 = np.zeros(k)
+    Lambda2 = np.zeros(k)
+
+    # The compensator at the first event only depends on passed time
+    Lambda1[0] = mu1 * time_stamp[0]
+    Lambda2[0] = mu2 * time_stamp[0]
+
+    # Evaluation of the global compensator at each instant t_i
+    for i in range(1, k):
+        delta_t = time_stamp[i] - time_stamp[i-1]
+
+        is_buy = side[i-1]
+        is_sell = 1 - side[i-1]
+
+        # update of cumulative counts N(t)
+        N1[i] = N1[i-1] + is_buy
+        N2[i] = N2[i-1] + is_sell
+
+        # update of the 4 historical shock states S(t)
+        S1_1[i] = (is_buy  + S1_1[i-1]) * np.exp(-beta1_1 * delta_t)
+        S2_1[i] = (is_sell + S2_1[i-1]) * np.exp(-beta2_1 * delta_t)
+        S1_2[i] = (is_buy  + S1_2[i-1]) * np.exp(-beta1_2 * delta_t)
+        S2_2[i] = (is_sell + S2_2[i-1]) * np.exp(-beta2_2 * delta_t)
+
+        # exact (analytical) primitive, summed over the 2 scales
+        Lambda1[i] = (mu1 * time_stamp[i]
+                      + R11_1 * (N1[i] - S1_1[i]) + R12_1 * (N2[i] - S2_1[i])
+                      + R11_2 * (N1[i] - S1_2[i]) + R12_2 * (N2[i] - S2_2[i]))
+
+        Lambda2[i] = (mu2 * time_stamp[i]
+                      + R21_1 * (N1[i] - S1_1[i]) + R22_1 * (N2[i] - S2_1[i])
+                      + R21_2 * (N1[i] - S1_2[i]) + R22_2 * (N2[i] - S2_2[i]))
+
+    # change-of-time theorem, separated by side
+    tau_1 = Lambda1[side == 1]
+    tau_2 = Lambda2[side == 0]
+
+    # residuals u_i = inter-event times in the new (compensated) clock
+    u1 = np.diff(tau_1)
+    u2 = np.diff(tau_2)
+
+    return u1, u2
+
+
+    #---
+
+def bivariate_goodness_of_fit_sum_exp(theta_estimate, df, verbose=True):
+
+    # residuals estimated
+    u1, u2 = hawkes_residuals_bivariate_sum_exp(theta_estimate, df)
+
+    residuals = [u1, u2]
+    if verbose:
+        print("--- Goodness of fit ---")
+
+    results = []
+    for u in residuals:
+        # TEST 1 : Kolmogorov-Smirnov (Marginal distribution Exp(1))
+        # H0 : data follows an Exp(1) distribution
+        ks_stat, ks_pval = kstest(u, 'expon')
+        if verbose:
+            print(f"KS Test       -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
+
+        # TEST 2 : Ljung-Box (Linear AC until the 20th lag)
+        # H0 : residuals are independant (no autocorrelation)
+        lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
+        lb_pval = lb_result['lb_pvalue'].iloc[0]
+        if verbose:
+            print(f"Ljung-Box     -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
+
+        sigma2_empirique, ed_stat, ed_pval = engle_russell_ed_test(u)
+
+        if verbose:
+            print(f"empirical variance of résidus : {sigma2_empirique:.4f}")
+            print(f"Engle-Russell ED Test -> Stat Z: {ed_stat:.4f} | p-value: {ed_pval:.4f}")
+
+        results.append((ks_pval, lb_pval, ed_pval))
+
+    return (u1, u2), results
