@@ -652,7 +652,7 @@ def bivariate_goodness_of_fit(theta_estimate, df, verbose=True):
 
 
 # --- Bivariate pass-rate loop ---------------------------------------
-def pass_rate_bivariate(numerous_dfs=None,
+def pass_rate_bivariate_sim(numerous_dfs=None,
                         n_sim=10,
                         baseline=np.array([0.3, 0.2]),
                         adjacency=np.array([[0.2, 0.1], [0.3, 0.15]]),
