@@ -1049,8 +1049,8 @@ def fit_bivariate_sum_exp(df,
     (0.0, 1.0),     # 9: R22_2
     (1e-3, 20.0),  # 10: beta1_1
     (1e-3, 20.0),  # 11: beta2_1
-    (300, 1000.0),  # 12: beta1_2
-    (300, 1000.0)   # 13: beta2_2
+    (300, 1500.0),  # 12: beta1_2
+    (300, 1500.0)   # 13: beta2_2
     )
 
     def spectral_det_sum(theta):
