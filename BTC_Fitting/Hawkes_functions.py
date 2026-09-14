@@ -397,7 +397,7 @@ def fit_univariate(time_stamp,
     return resultat
 
 
-# --- Univariate goodness of fit (cells 17-18) ---------------------------------
+# --- Univariate goodness of fit ---------------------------------
 def univariate_goodness_of_fit(theta_estime, time_stamp, verbose=True):
 
     # residuals estimated
@@ -428,7 +428,7 @@ def univariate_goodness_of_fit(theta_estime, time_stamp, verbose=True):
     return u, ks_pval, lb_pval, ed_pval
 
 
-# --- Univariate pass-rate loop (cell 19) --------------------------------------
+# --- Univariate pass-rate loop  --------------------------------------
 def pass_rate_univariate(numerous_timestamps=None,
                          n_sim=10,
                          sim_params=dict(mu=1.0, beta=0.3, gamma=0.24, T_max=10000),
@@ -993,11 +993,12 @@ def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
         
         S2_2[i]=((1-side[i-1]) + S2_2[i-1])*np.exp(-beta2_2*(time_stamp[i]-time_stamp[i-1]))
 
-        if side[i]==1: 
-            first_sum+=np.log( mu1 + gamma11_1*S1_1[i] + gamma12_1*S2_1[i] + gamma11_2*S1_2[i] + gamma12_2*S2_2[i])
+        if side[i]==1:
+            intensity = mu1 + gamma11_1*S1_1[i] + gamma12_1*S2_1[i] + gamma11_2*S1_2[i] + gamma12_2*S2_2[i]
         else:
-            first_sum+=np.log( mu2 + gamma21_1*S1_1[i] + gamma22_1*S2_1[i] + gamma21_2*S1_2[i] + gamma22_2*S2_2[i])
+            intensity = mu2 + gamma21_1*S1_1[i] + gamma22_1*S2_1[i] + gamma21_2*S1_2[i] + gamma22_2*S2_2[i]
 
+        first_sum += np.log(max(intensity, 1e-300))
 
 
     # Second sum
@@ -1021,10 +1022,13 @@ def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
 
     second_sum = (R11_1 + R21_1)*Re1_1 + (R12_1 + R22_1)*Re2_1 + (R11_2 + R21_2)*Re1_2 + (R12_2 + R22_2)*Re2_2
 
+    
+    nll = -(first_sum - (mu1+mu2)*last_time - second_sum)
 
-    return -(first_sum - (mu1+mu2)*last_time - second_sum)
+    if not np.isfinite(nll):
+        return 1e10
 
-
+return nll
 
 def fit_bivariate_sum_exp(df,
                           theta_init,
@@ -1043,10 +1047,10 @@ def fit_bivariate_sum_exp(df,
     (0.0, 1.0),     # 7: R21_2
     (0.0, 1.0),     # 8: R12_2
     (0.0, 1.0),     # 9: R22_2
-    (1e-3, 500.0),  # 10: beta1_1
-    (1e-3, 500.0),  # 11: beta2_1
-    (1e-3, 3000.0),  # 12: beta1_2
-    (1e-3, 3000.0)   # 13: beta2_2
+    (1e-3, 20.0),  # 10: beta1_1
+    (1e-3, 20.0),  # 11: beta2_1
+    (300, 1000.0),  # 12: beta1_2
+    (300, 1000.0)   # 13: beta2_2
     )
 
     def spectral_det_sum(theta):
@@ -1219,3 +1223,154 @@ def bivariate_goodness_of_fit_sum_exp(theta_estimate, df, verbose=True):
         results.append((ks_pval, lb_pval, ed_pval))
 
     return (u1, u2), results
+
+
+
+
+def _eval_window_sum_exp(current_df, bounds, constraints):
+    t_w = current_df['time_stamp'].to_numpy()
+    side_w = current_df['side'].to_numpy()
+    T_w = t_w[-1]
+    N1 = side_w.sum(); N2 = len(side_w) - N1
+    dt_mean = np.mean(np.diff(t_w))
+
+    theta_start = np.array([
+        (N1 / T_w) * 0.3, (N2 / T_w) * 0.3,
+        0.15, 0.15, 0.10, 0.15,
+        0.05, 0.05, 0.05, 0.05,
+        1.0 / (20 * dt_mean), 1.0 / (20 * dt_mean),
+        1.0 / dt_mean,        1.0 / dt_mean,
+    ])
+
+    resultat = minimize(
+        fun=neg_log_likelihood_bivariate_sum_exp,
+        x0=theta_start,
+        args=(current_df,),
+        method='trust-constr',
+        bounds=bounds,
+        constraints=constraints,
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
+    )
+
+    u1, u2 = hawkes_residuals_bivariate_sum_exp(resultat.x, current_df)
+
+    out = {}
+    for dim, u in [(1, u1), (2, u2)]:
+        _, ks_p = kstest(u, 'expon')
+        lb_p = acorr_ljungbox(u, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
+        sigma2, _, er_p = engle_russell_ed_test(u)
+        out[dim] = {
+            'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'ks_stat': _ if False else None,
+            'sigma2': sigma2,
+            'pass_ks': ks_p > 0.05, 'pass_lb': lb_p > 0.05, 'pass_er': er_p > 0.05,
+        }
+    return out
+
+
+def pass_rate_by_window_size(t, side,
+                             sizes_min=(5, 10, 20),
+                             n_per_size=10,
+                             seed=42,
+                             verbose=True):
+
+    rng = np.random.default_rng(seed)
+
+    # --- bounds & constraints (hard-coded, as built) ---
+    bounds = (
+        (1e-5, None), (1e-5, None),
+        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+        (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0)
+    )
+
+    def spectral_det_sum(theta):
+        r11 = theta[2] + theta[6]; r21 = theta[3] + theta[7]
+        r12 = theta[4] + theta[8]; r22 = theta[5] + theta[9]
+        return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
+
+    A = np.zeros((4, 14))
+    A[0, 2] = 1.0;  A[0, 6] = 1.0
+    A[1, 5] = 1.0;  A[1, 9] = 1.0
+    A[2, 12] = 1.0; A[2, 10] = -1.0
+    A[3, 13] = 1.0; A[3, 11] = -1.0
+    lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
+    ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
+    constraints = [
+        LinearConstraint(A, lb, ub),
+        NonlinearConstraint(spectral_det_sum, 1e-5, np.inf),
+    ]
+
+    T_total = t[-1]
+    results = {}   # size_min -> aggregated dict
+
+    for size_min in sizes_min:
+        duration = size_min * 60
+
+        counts = {1: dict(ks=0, lb=0, er=0, joint=0),
+                  2: dict(ks=0, lb=0, er=0, joint=0)}
+        count_global = 0
+        n_valid = 0
+        sigma2_list = {1: [], 2: []}   # effect sizes to report alongside p-values
+
+        attempts = 0
+        max_attempts = n_per_size * 20   # avoid infinite loop if many empty draws
+
+        while n_valid < n_per_size and attempts < max_attempts:
+            attempts += 1
+
+            # random start so the whole window fits inside the series
+            start = rng.uniform(0, T_total - duration)
+            end = start + duration
+            mask = (t >= start) & (t < end)
+
+            if mask.sum() < 50:          # skip windows too sparse to fit 14 params
+                continue
+
+            t_win = t[mask] - t[mask][0]  # re-anchor to 0
+            side_win = side[mask]
+            df_win = pd.DataFrame({"time_stamp": t_win, "side": side_win})
+
+            try:
+                res = _eval_window_sum_exp(df_win, bounds, constraints)
+            except Exception:
+                continue   # a pathological window shouldn't kill the whole run
+
+            n_valid += 1
+            for dim in (1, 2):
+                r = res[dim]
+                if r['pass_ks']: counts[dim]['ks'] += 1
+                if r['pass_lb']: counts[dim]['lb'] += 1
+                if r['pass_er']: counts[dim]['er'] += 1
+                if r['pass_ks'] and r['pass_lb'] and r['pass_er']:
+                    counts[dim]['joint'] += 1
+                sigma2_list[dim].append(r['sigma2'])
+
+            if (res[1]['pass_ks'] and res[1]['pass_lb'] and res[1]['pass_er'] and
+                res[2]['pass_ks'] and res[2]['pass_lb'] and res[2]['pass_er']):
+                count_global += 1
+
+        results[size_min] = {
+            'n_valid': n_valid,
+            'counts': counts,
+            'global': count_global,
+            'sigma2_median': {d: (np.median(sigma2_list[d]) if sigma2_list[d] else np.nan)
+                              for d in (1, 2)},
+        }
+
+    if verbose:
+        for size_min in sizes_min:
+            r = results[size_min]
+            n = r['n_valid']
+            if n == 0:
+                print(f"\n=== {size_min} min : aucune fenêtre valide ===")
+                continue
+            print(f"\n=== Fenêtres de {size_min} min  ({n} fenêtres) ===")
+            for dim, label in [(1, "Buys"), (2, "Sells")]:
+                c = r['counts'][dim]
+                print(f"  [{label}]  KS {100*c['ks']/n:.0f}% | "
+                      f"LB {100*c['lb']/n:.0f}% | ED {100*c['er']/n:.0f}% | "
+                      f"Joint {100*c['joint']/n:.0f}%  "
+                      f"(var résidus médiane : {r['sigma2_median'][dim]:.3f})")
+            print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
+
+    return results
