@@ -847,111 +847,6 @@ if __name__ == "__main__":
 
 
 
-def pass_rate_windows(windows,
-                      theta_init=None,
-                      bounds=None,
-                      constraints=None,
-                      verbose=True):
-
-    if bounds is None:
-        bounds = _default_bivariate_bounds()
-
-    if constraints is None:
-        constraints = [
-            NonlinearConstraint(spectral_det, 1e-5, np.inf),
-            NonlinearConstraint(trace_1, 1e-5, np.inf),
-            NonlinearConstraint(trace_2, 1e-5, np.inf)
-        ]
-
-    # accept a dict or a list of DataFrames
-    dfs = list(windows.values()) if isinstance(windows, dict) else list(windows)
-
-    # counters
-    count_ks_1, count_ks_2 = 0, 0
-    count_lb_1, count_lb_2 = 0, 0
-    count_er_1, count_er_2 = 0, 0
-    count_joint_1, count_joint_2 = 0, 0
-    count_global_joint = 0
-
-    taille = len(dfs)
-
-    for current_df in dfs:
-
-        # per-window data-driven init (unless one was passed explicitly)
-        if theta_init is None:
-            t_w = current_df['time_stamp'].to_numpy()
-            side_w = current_df['side'].to_numpy()
-            T_w = t_w[-1]
-            N1 = side_w.sum(); N2 = len(side_w) - N1
-            dt_mean = np.mean(np.diff(t_w))
-            theta_start = np.array([
-                (N1 / T_w) * 0.3, (N2 / T_w) * 0.3,
-                0.3, 0.1, 0.1, 0.3,
-                1.0 / (5 * dt_mean), 1.0 / (5 * dt_mean),
-            ])
-        else:
-            theta_start = theta_init
-
-        # fit on the window
-        resultat = minimize(
-            fun=neg_log_likelihood_bivariate,
-            x0=theta_start,
-            args=(current_df,),
-            method='trust-constr',
-            bounds=bounds,
-            constraints=constraints,
-            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
-        )
-
-        u1, u2 = hawkes_residuals_bivariate(resultat.x, current_df)
-
-        # Dim 1 (Buys)
-        _, ks_pval_1 = kstest(u1, 'expon')
-        lb_pval_1 = acorr_ljungbox(u1, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
-        _, _, er_pval_1 = engle_russell_ed_test(u1)
-        pass_ks_1 = ks_pval_1 > 0.05
-        pass_lb_1 = lb_pval_1 > 0.05
-        pass_er_1 = er_pval_1 > 0.05
-        if pass_ks_1: count_ks_1 += 1
-        if pass_lb_1: count_lb_1 += 1
-        if pass_er_1: count_er_1 += 1
-        if pass_ks_1 and pass_lb_1 and pass_er_1: count_joint_1 += 1
-
-        # Dim 2 (Sells)
-        _, ks_pval_2 = kstest(u2, 'expon')
-        lb_pval_2 = acorr_ljungbox(u2, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
-        _, _, er_pval_2 = engle_russell_ed_test(u2)
-        pass_ks_2 = ks_pval_2 > 0.05
-        pass_lb_2 = lb_pval_2 > 0.05
-        pass_er_2 = er_pval_2 > 0.05
-        if pass_ks_2: count_ks_2 += 1
-        if pass_lb_2: count_lb_2 += 1
-        if pass_er_2: count_er_2 += 1
-        if pass_ks_2 and pass_lb_2 and pass_er_2: count_joint_2 += 1
-
-        # Strict global
-        if (pass_ks_1 and pass_lb_1 and pass_er_1) and (pass_ks_2 and pass_lb_2 and pass_er_2):
-            count_global_joint += 1
-
-    if verbose:
-        print(f"\n--- PASS RATE RESULTS (out of {taille} windows) ---")
-        print("\n[Dimension 1 - Buys]")
-        print(f"KS : {(count_ks_1 / taille) * 100:.2f}% | LB : {(count_lb_1 / taille) * 100:.2f}% | ED : {(count_er_1 / taille) * 100:.2f}%")
-        print(f"Joint 1 : {(count_joint_1 / taille) * 100:.2f}%")
-        print("\n[Dimension 2 - Sells]")
-        print(f"KS : {(count_ks_2 / taille) * 100:.2f}% | LB : {(count_lb_2 / taille) * 100:.2f}% | ED : {(count_er_2 / taille) * 100:.2f}%")
-        print(f"Joint 2 : {(count_joint_2 / taille) * 100:.2f}%")
-        print("\n[Global Bivariate Model]")
-        print(f"Strict Validation (Intersection of all 6 tests) : {(count_global_joint / taille) * 100:.2f}%")
-
-    return {
-        "ks_1": count_ks_1, "lb_1": count_lb_1, "er_1": count_er_1, "joint_1": count_joint_1,
-        "ks_2": count_ks_2, "lb_2": count_lb_2, "er_2": count_er_2, "joint_2": count_joint_2,
-        "global_joint": count_global_joint, "taille": taille,
-    }
-
-
-
 
 def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
 
@@ -1405,3 +1300,194 @@ def qq_overlay(resid_mono, resid_sum, title=""):
     plt.legend()
     plt.grid(alpha=0.3)
     plt.show()
+
+
+def _sample_random_windows(t: np.ndarray, side: np.ndarray,
+                            duration: float, n_per_size: int,
+                            rng: np.random.Generator, min_points: int,
+                            max_attempts_factor: int = 20):
+
+    T_total = t[-1]
+    n_valid = 0
+    attempts = 0
+    max_attempts = n_per_size * max_attempts_factor
+
+    while n_valid < n_per_size and attempts < max_attempts:
+        attempts += 1
+
+        start = rng.uniform(0, T_total - duration)
+        end = start + duration
+        mask = (t >= start) & (t < end)
+
+        if mask.sum() < min_points:
+            continue
+
+        t_win = t[mask] - t[mask][0]
+        side_win = side[mask]
+
+        n_valid += 1
+        yield pd.DataFrame({"time_stamp": t_win, "side": side_win})
+
+
+def _aggregate_pass_rates(t: np.ndarray, side: np.ndarray,
+                           eval_window_fn, bounds, constraints,
+                           sizes_min: tuple, n_per_size: int,
+                           seed: int, min_points: int) -> dict:
+    
+    rng = np.random.default_rng(seed)
+    results = {}
+
+    for size_min in sizes_min:
+        duration = size_min * 60
+
+        counts = {1: dict(ks=0, lb=0, er=0, joint=0),
+                  2: dict(ks=0, lb=0, er=0, joint=0)}
+        count_global = 0
+        n_valid = 0
+        sigma2_list = {1: [], 2: []}
+
+        windows = _sample_random_windows(t, side, duration, n_per_size, rng, min_points)
+
+        for df_win in windows:
+            try:
+                res = eval_window_fn(df_win, bounds, constraints)
+            except Exception:
+                continue
+
+            n_valid += 1
+            for dim in (1, 2):
+                r = res[dim]
+                if r["pass_ks"]: counts[dim]["ks"] += 1
+                if r["pass_lb"]: counts[dim]["lb"] += 1
+                if r["pass_er"]: counts[dim]["er"] += 1
+                if r["pass_ks"] and r["pass_lb"] and r["pass_er"]:
+                    counts[dim]["joint"] += 1
+                sigma2_list[dim].append(r["sigma2"])
+
+            if (res[1]["pass_ks"] and res[1]["pass_lb"] and res[1]["pass_er"] and
+                res[2]["pass_ks"] and res[2]["pass_lb"] and res[2]["pass_er"]):
+                count_global += 1
+
+        results[size_min] = {
+            "n_valid": n_valid,
+            "counts": counts,
+            "global": count_global,
+            "sigma2_median": {d: (np.median(sigma2_list[d]) if sigma2_list[d] else np.nan)
+                              for d in (1, 2)},
+        }
+
+    return results
+
+
+def _print_pass_rate_summary(results: dict, sizes_min: tuple):
+    # Print the standard pass-rate-by-window-size report.
+    for size_min in sizes_min:
+        r = results[size_min]
+        n = r["n_valid"]
+        if n == 0:
+            print(f"\n=== {size_min} min: no valid window ===")
+            continue
+        print(f"\n=== {size_min}-min windows  ({n} windows) ===")
+        for dim, label in [(1, "Buys"), (2, "Sells")]:
+            c = r["counts"][dim]
+            print(f"  [{label}]  KS {100*c['ks']/n:.0f}% | "
+                  f"LB {100*c['lb']/n:.0f}% | ED {100*c['er']/n:.0f}% | "
+                  f"Joint {100*c['joint']/n:.0f}%  "
+                  f"(median residual variance: {r['sigma2_median'][dim]:.3f})")
+        print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
+
+
+def pass_rate_by_window_size_bivariate(t, side,
+                                        sizes_min=(5, 10, 20),
+                                        n_per_size=10,
+                                        seed=42,
+                                        min_points=30,
+                                        verbose=True):
+    # Pass-rate study across window sizes for the classic bivariate Hawkes model.
+    bounds = _default_bivariate_bounds()
+    constraints = [
+        NonlinearConstraint(spectral_det, 1e-5, np.inf),
+        NonlinearConstraint(trace_1, 1e-5, np.inf),
+        NonlinearConstraint(trace_2, 1e-5, np.inf),
+    ]
+
+    results = _aggregate_pass_rates(
+        t, side, _eval_window_bivariate, bounds, constraints,
+        sizes_min, n_per_size, seed, min_points,
+    )
+
+    if verbose:
+        _print_pass_rate_summary(results, sizes_min)
+
+    return results
+
+
+def pass_rate_by_window_size_sum_exp(t, side,
+                                      sizes_min=(5, 10, 20),
+                                      n_per_size=10,
+                                      seed=42,
+                                      min_points=50,
+                                      verbose=True):
+    # Pass-rate study across window sizes for the sum-of-exponentials Hawkes model.
+    bounds = (
+        (1e-5, None), (1e-5, None),
+        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+        (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0),
+    )
+
+    def spectral_det_sum(theta):
+        r11 = theta[2] + theta[6]; r21 = theta[3] + theta[7]
+        r12 = theta[4] + theta[8]; r22 = theta[5] + theta[9]
+        return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
+
+    A = np.zeros((4, 14))
+    A[0, 2] = 1.0;  A[0, 6] = 1.0
+    A[1, 5] = 1.0;  A[1, 9] = 1.0
+    A[2, 12] = 1.0; A[2, 10] = -1.0
+    A[3, 13] = 1.0; A[3, 11] = -1.0
+    lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
+    ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
+    constraints = [
+        LinearConstraint(A, lb, ub),
+        NonlinearConstraint(spectral_det_sum, 1e-5, np.inf),
+    ]
+
+    results = _aggregate_pass_rates(
+        t, side, _eval_window_sum_exp, bounds, constraints,
+        sizes_min, n_per_size, seed, min_points,
+    )
+
+    if verbose:
+        _print_pass_rate_summary(results, sizes_min)
+
+    return results
+
+
+
+def compare_kernels_by_window_size(t, side,
+                                    sizes_min=(5, 10, 20),
+                                    n_per_size=10,
+                                    seed=42,
+                                    verbose=True):
+    # Same seed for the two kernels : for clean comparison 
+    
+    results_biv = pass_rate_by_window_size_bivariate(
+        t, side, sizes_min=sizes_min, n_per_size=n_per_size, seed=seed, verbose=False,
+    )
+    results_sum = pass_rate_by_window_size_sum_exp(
+        t, side, sizes_min=sizes_min, n_per_size=n_per_size, seed=seed, verbose=False,
+    )
+
+    if verbose:
+        print(f"{'Window':<10} {'Model':<12} {'Global pass rate':<18} {'n valid'}")
+        print("-" * 55)
+        for size_min in sizes_min:
+            for label, res in [("Bivariate", results_biv), ("Sum-exp", results_sum)]:
+                r = res[size_min]
+                n = r["n_valid"]
+                rate = f"{100 * r['global'] / n:.1f}%" if n > 0 else "n/a"
+                print(f"{size_min} min{'':<4} {label:<12} {rate:<18} {n}")
+            print()
+
+    return {"bivariate": results_biv, "sum_exp": results_sum}
