@@ -620,7 +620,7 @@ def fit_bivariate(df,
 # --- Bivariate goodness of fit ----------------------------------
 def bivariate_goodness_of_fit(theta_estimate, df, verbose=True):
 
-    # residuals estimated
+    # Estimated residuals
     u1, u2 = hawkes_residuals_bivariate(theta_estimate, df)
 
     residuals = [u1, u2]
@@ -629,24 +629,27 @@ def bivariate_goodness_of_fit(theta_estimate, df, verbose=True):
 
     results = []
     for u in residuals:
-        # TEST 1 : Kolmogorov-Smirnov (Marginal distribution Exp(1))
-        # H0 : data follows an Exp(1) distribution
-        ks_stat, ks_pval = kstest(u, 'expon')
+        # TEST 1: Kolmogorov-Smirnov (marginal distribution Exp(1))
+        # H0: data follows an Exp(1) distribution
+        ks_stat, ks_pval = kstest(u, "expon")
         if verbose:
-            print(f"KS Test       -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
+            print(f"KS Test               -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
+            print()
 
-        # TEST 2 : Ljung-Box (Linear AC until the 20th lag)
-        # H0 : residuals are independant (no autocorrelation)
+        # TEST 2: Ljung-Box (linear autocorrelation up to lag 20)
+        # H0: residuals are independent (no autocorrelation)
         lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
-        lb_pval = lb_result['lb_pvalue'].iloc[0]
+        lb_pval = lb_result["lb_pvalue"].iloc[0]
         if verbose:
-            print(f"Ljung-Box     -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
+            print(f"Ljung-Box             -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
+            print()
 
-        sigma2_empirique, ed_stat, ed_pval = engle_russell_ed_test(u)
+        sigma2_empirical, ed_stat, ed_pval = engle_russell_ed_test(u)
 
         if verbose:
-            print(f"empirical variance of résidus : {sigma2_empirique:.4f}")
+            print(f"Empirical variance of residuals: {sigma2_empirical:.4f}")
             print(f"Engle-Russell ED Test -> Stat Z: {ed_stat:.4f} | p-value: {ed_pval:.4f}")
+            print()
 
         results.append((ks_pval, lb_pval, ed_pval))
 
@@ -1376,3 +1379,29 @@ def pass_rate_by_window_size(t, side,
             print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
 
     return results
+
+
+
+def qq_overlay(resid_mono, resid_sum, title=""):
+    def quantiles(u):
+        u_sorted = np.sort(u)
+        n = len(u_sorted)
+        p = (np.arange(1, n + 1) - 0.5) / n
+        return stats.expon.ppf(p), u_sorted   # (theoritical, empirical)
+
+    theo_m, emp_m = quantiles(resid_mono)
+    theo_s, emp_s = quantiles(resid_sum)
+
+    plt.figure(figsize=(6, 6))
+    plt.scatter(theo_m, emp_m, s=5, alpha=0.4, label="Mono-exp", color="tab:red")
+    plt.scatter(theo_s, emp_s, s=5, alpha=0.4, label="Sum-exp",  color="tab:blue")
+
+    lim = max(theo_m.max(), emp_m.max(), theo_s.max(), emp_s.max())
+    plt.plot([0, lim], [0, lim], 'k--', label="y = x (fit parfait)")
+
+    plt.xlabel("Theorical Quantile Exp(1)")
+    plt.ylabel("Empirical Quantiles of residuals")
+    plt.title(f"QQ-plot : mono-exp vs sum-exp — {title}")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.show()

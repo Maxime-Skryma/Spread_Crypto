@@ -95,3 +95,41 @@ def initialize_hawkes_params(t_win: np.ndarray, side_win: np.ndarray) -> tuple[n
     ]
 
     return theta_init, bounds, constraints
+
+
+
+def initialize_hawkes_params_sum_exp(t_win: np.ndarray, side_win: np.ndarray) -> np.ndarray:
+    # Compute the initial parameter guess for the bivariate Hawkes model
+    # with a sum-of-two-exponentials kernel (short + long memory scales),
+    # based on empirical rates over the window.
+
+    duration = t_win[-1] - t_win[0]
+    n_buy = side_win.sum()
+    n_sell = len(side_win) - n_buy
+    rate_buy, rate_sell = n_buy / duration, n_sell / duration
+    dt_mean = np.mean(np.diff(t_win))
+
+    theta_init_sum = np.array([
+        rate_buy * 0.3,    # 0: mu1
+        rate_sell * 0.3,   # 1: mu2
+
+        0.15,   # 2: R11_1
+        0.15,   # 3: R21_1
+        0.10,   # 4: R12_1
+        0.15,   # 5: R22_1
+
+        0.05,   # 6: R11_2
+        0.05,   # 7: R21_2
+        0.05,   # 8: R12_2
+        0.05,   # 9: R22_2
+
+        # --- scale 1 = LONG memory = SMALL beta ---
+        1.0 / (20 * dt_mean),  # 10: beta1_1
+        1.0 / (20 * dt_mean),  # 11: beta2_1
+
+        # --- scale 2 = SHORT memory = LARGE beta ---
+        1.0 / dt_mean,         # 12: beta1_2
+        1.0 / dt_mean,         # 13: beta2_2
+    ])
+
+    return theta_init_sum
