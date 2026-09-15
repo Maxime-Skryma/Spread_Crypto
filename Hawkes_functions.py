@@ -10,6 +10,8 @@ from scipy.stats import kstest, expon
 from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 
 from tick.hawkes import SimuHawkesExpKernels
+from tardis_dev import download_datasets_async
+
 
 
 # =============================================================================
