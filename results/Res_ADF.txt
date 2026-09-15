@@ -1,6 +1,0 @@
-Res of log_BTCUSDT on log_ETHUSDT has a t_value of -1.713341724514447
-Res of log_BTCUSDT on log_SOLUSDT has a t_value of -1.1376123296806486
-Res of log_ETHUSDT on log_BTCUSDT has a t_value of -2.0741811781643227
-Res of log_ETHUSDT on log_SOLUSDT has a t_value of -2.1826794196222874
-Res of log_SOLUSDT on log_BTCUSDT has a t_value of -1.2746872050771039
-Res of log_SOLUSDT on log_ETHUSDT has a t_value of -2.1748874301160175
