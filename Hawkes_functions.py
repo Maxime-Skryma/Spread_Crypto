@@ -590,29 +590,29 @@ def fit_bivariate(df,
         )
 
     if verbose:
-        print("\n--- Bivariate : Estimated results ---")
-        print(f"Succès de l'optimisation : {resultat.success}")
-        print(f"Statut                   : {resultat.message}")
+            print("\n--- Bivariate: Estimated Results ---")
+            print(f"Optimization success : {resultat.success}")
+            print(f"Status               : {resultat.message}")
 
-        print("\n[Baseline intensity - mu]")
-        print(f"mu1 (Dimension 1) : {resultat.x[0]:.6f}")
-        print(f"mu2 (Dimension 2) : {resultat.x[1]:.6f}")
+            print("\n[Baseline intensity - mu]")
+            print(f"mu1 (Dimension 1) : {resultat.x[0]:.6f}")
+            print(f"mu2 (Dimension 2) : {resultat.x[1]:.6f}")
 
-        print("\n[Branchement ratio matrix - R]")
-        print(f"R11 (Auto-excitation 1->1)   : {resultat.x[2]:.4f}")
-        print(f"R21 (Croisée 1->2)           : {resultat.x[3]:.4f}")
-        print(f"R12 (Croisée 2->1)           : {resultat.x[4]:.4f}")
-        print(f"R22 (Auto-excitation 2->2)   : {resultat.x[5]:.4f}")
+            print("\n[Branching ratio matrix - R]")
+            print(f"R11 (Self-excitation 1->1) : {resultat.x[2]:.4f}")
+            print(f"R21 (Cross-excitation 1->2): {resultat.x[3]:.4f}")
+            print(f"R12 (Cross-excitation 2->1): {resultat.x[4]:.4f}")
+            print(f"R22 (Self-excitation 2->2) : {resultat.x[5]:.4f}")
 
-        print("\n[beta]")
-        print(f"beta1 (Chocs issus de 1) : {resultat.x[6]:.4f}")
-        print(f"beta2 (Chocs issus de 2) : {resultat.x[7]:.4f}")
+            print("\n[beta]")
+            print(f"beta1 (Decay / Shocks from 1) : {resultat.x[6]:.4f}")
+            print(f"beta2 (Decay / Shocks from 2) : {resultat.x[7]:.4f}")
 
-        print("\n[gamma]")
-        print(f"-> gamma11 : {(resultat.x[2] * resultat.x[6]):.4f}")
-        print(f"-> gamma21 : {(resultat.x[3] * resultat.x[6]):.4f}")
-        print(f"-> gamma12 : {(resultat.x[4] * resultat.x[7]):.4f}")
-        print(f"-> gamma22 : {(resultat.x[5] * resultat.x[7]):.4f}")
+            print("\n[gamma]")
+            print(f"-> gamma11 : {(resultat.x[2] * resultat.x[6]):.4f}")
+            print(f"-> gamma21 : {(resultat.x[3] * resultat.x[6]):.4f}")
+            print(f"-> gamma12 : {(resultat.x[4] * resultat.x[7]):.4f}")
+            print(f"-> gamma22 : {(resultat.x[5] * resultat.x[7]):.4f}")
 
     return resultat
 
