@@ -1,0 +1,6 @@
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.7989742141526683
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.9528819423198768
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.5287715181873703
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.5311423830057853
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.8285676328979747
+Res of log_SOLUSDT on log_ETHUSDT has a t_value of 0.5035187538960494
