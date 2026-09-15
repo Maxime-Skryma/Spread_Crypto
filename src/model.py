@@ -1172,7 +1172,7 @@ def qq_overlay(resid_mono, resid_sum, title=""):
         u_sorted = np.sort(u)
         n = len(u_sorted)
         p = (np.arange(1, n + 1) - 0.5) / n
-        return stats.expon.ppf(p), u_sorted   # (theoritical, empirical)
+        return expon.ppf(p), u_sorted   # (theoritical, empirical)
 
     theo_m, emp_m = quantiles(resid_mono)
     theo_s, emp_s = quantiles(resid_sum)
