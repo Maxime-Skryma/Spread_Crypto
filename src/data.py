@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from .model import _default_bivariate_bounds
+from .model import _default_bivariate_bounds, spectral_det, trace_1, trace_2
 
 from scipy.optimize import minimize, NonlinearConstraint,LinearConstraint
 
@@ -46,6 +46,9 @@ def extract_time_window(t: np.ndarray, side: np.ndarray, start: float, duration:
     
     # Extract a time window from the Hawkes-formatted data, with time re-based to 0.
 
+    t = np.asarray(t)
+    side = np.asarray(side)
+
     end = start + duration
     mask = (t >= start) & (t < end)
 
@@ -56,6 +59,9 @@ def extract_time_window(t: np.ndarray, side: np.ndarray, start: float, duration:
 
 
 def initialize_hawkes_params(t_win: np.ndarray, side_win: np.ndarray) -> tuple[np.ndarray, list, list]:
+
+    t_win = np.asarray(t_win)
+    side_win = np.asarray(side_win)
 
     duration = t_win[-1] - t_win[0]
     n_buy = side_win.sum()
@@ -88,11 +94,13 @@ def initialize_hawkes_params(t_win: np.ndarray, side_win: np.ndarray) -> tuple[n
     return theta_init, bounds, constraints
 
 
-
 def initialize_hawkes_params_sum_exp(t_win: np.ndarray, side_win: np.ndarray) -> np.ndarray:
     # Compute the initial parameter guess for the bivariate Hawkes model
     # with a sum-of-two-exponentials kernel (short + long memory scales),
     # based on empirical rates over the window.
+
+    t_win = np.asarray(t_win)
+    side_win = np.asarray(side_win)
 
     duration = t_win[-1] - t_win[0]
     n_buy = side_win.sum()
