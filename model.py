@@ -1167,116 +1167,6 @@ def _eval_window_sum_exp(current_df, bounds, constraints):
     return out
 
 
-def pass_rate_by_window_size(t, side,
-                             sizes_min=(5, 10, 20),
-                             n_per_size=10,
-                             seed=42,
-                             verbose=True):
-
-    rng = np.random.default_rng(seed)
-
-    # --- bounds & constraints (hard-coded, as built) ---
-    bounds = (
-        (1e-5, None), (1e-5, None),
-        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
-        (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
-        (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0)
-    )
-
-    def spectral_det_sum(theta):
-        r11 = theta[2] + theta[6]; r21 = theta[3] + theta[7]
-        r12 = theta[4] + theta[8]; r22 = theta[5] + theta[9]
-        return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
-
-    A = np.zeros((4, 14))
-    A[0, 2] = 1.0;  A[0, 6] = 1.0
-    A[1, 5] = 1.0;  A[1, 9] = 1.0
-    A[2, 12] = 1.0; A[2, 10] = -1.0
-    A[3, 13] = 1.0; A[3, 11] = -1.0
-    lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
-    ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
-    constraints = [
-        LinearConstraint(A, lb, ub),
-        NonlinearConstraint(spectral_det_sum, 1e-5, np.inf),
-    ]
-
-    T_total = t[-1]
-    results = {}   # size_min -> aggregated dict
-
-    for size_min in sizes_min:
-        duration = size_min * 60
-
-        counts = {1: dict(ks=0, lb=0, er=0, joint=0),
-                  2: dict(ks=0, lb=0, er=0, joint=0)}
-        count_global = 0
-        n_valid = 0
-        sigma2_list = {1: [], 2: []}   # effect sizes to report alongside p-values
-
-        attempts = 0
-        max_attempts = n_per_size * 20   # avoid infinite loop if many empty draws
-
-        while n_valid < n_per_size and attempts < max_attempts:
-            attempts += 1
-
-            # random start so the whole window fits inside the series
-            start = rng.uniform(0, T_total - duration)
-            end = start + duration
-            mask = (t >= start) & (t < end)
-
-            if mask.sum() < 50:          # skip windows too sparse to fit 14 params
-                continue
-
-            t_win = t[mask] - t[mask][0]  # re-anchor to 0
-            side_win = side[mask]
-            df_win = pd.DataFrame({"time_stamp": t_win, "side": side_win})
-
-            try:
-                res = _eval_window_sum_exp(df_win, bounds, constraints)
-            except Exception:
-                continue   # a pathological window shouldn't kill the whole run
-
-            n_valid += 1
-            for dim in (1, 2):
-                r = res[dim]
-                if r['pass_ks']: counts[dim]['ks'] += 1
-                if r['pass_lb']: counts[dim]['lb'] += 1
-                if r['pass_er']: counts[dim]['er'] += 1
-                if r['pass_ks'] and r['pass_lb'] and r['pass_er']:
-                    counts[dim]['joint'] += 1
-                sigma2_list[dim].append(r['sigma2'])
-
-            if (res[1]['pass_ks'] and res[1]['pass_lb'] and res[1]['pass_er'] and
-                res[2]['pass_ks'] and res[2]['pass_lb'] and res[2]['pass_er']):
-                count_global += 1
-
-        results[size_min] = {
-            'n_valid': n_valid,
-            'counts': counts,
-            'global': count_global,
-            'sigma2_median': {d: (np.median(sigma2_list[d]) if sigma2_list[d] else np.nan)
-                              for d in (1, 2)},
-        }
-
-    if verbose:
-        for size_min in sizes_min:
-            r = results[size_min]
-            n = r['n_valid']
-            if n == 0:
-                print(f"\n=== {size_min} min : aucune fenêtre valide ===")
-                continue
-            print(f"\n=== Fenêtres de {size_min} min  ({n} fenêtres) ===")
-            for dim, label in [(1, "Buys"), (2, "Sells")]:
-                c = r['counts'][dim]
-                print(f"  [{label}]  KS {100*c['ks']/n:.0f}% | "
-                      f"LB {100*c['lb']/n:.0f}% | ED {100*c['er']/n:.0f}% | "
-                      f"Joint {100*c['joint']/n:.0f}%  "
-                      f"(var résidus médiane : {r['sigma2_median'][dim]:.3f})")
-            print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
-
-    return results
-
-
-
 def qq_overlay(resid_mono, resid_sum, title=""):
     def quantiles(u):
         u_sorted = np.sort(u)
@@ -1471,7 +1361,7 @@ def compare_kernels_by_window_size(t, side,
                                     seed=42,
                                     verbose=True):
     # Same seed for the two kernels : for clean comparison 
-    
+
     results_biv = pass_rate_by_window_size_bivariate(
         t, side, sizes_min=sizes_min, n_per_size=n_per_size, seed=seed, verbose=False,
     )
