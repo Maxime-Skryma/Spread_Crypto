@@ -1197,6 +1197,9 @@ def _sample_random_windows(t: np.ndarray, side: np.ndarray,
                             rng: np.random.Generator, min_points: int,
                             max_attempts_factor: int = 20):
 
+    t = np.asarray(t)
+    side = np.asarray(side)
+
     T_total = t[-1]
     n_valid = 0
     attempts = 0
