@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.optimize import brentq
-from scipy.optimize import minimize, NonlinearConstraint,LinearConstraint
+from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint
 from scipy.stats import norm
 
 from scipy.stats import kstest, expon
@@ -12,14 +12,11 @@ from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 from tick.hawkes import SimuHawkesExpKernels
 from tardis_dev import download_datasets_async
 
-
-
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
 
 # --- Discrete Hawkes Process --------------------------------------------------
-# Let's first try to modelise a Discrete Hawkes process
 def DHP(kernel, gamma, theta, law, n, mu):
     if kernel == "Erlang":
         alpha = np.array([gamma * np.exp(-k * theta) * k for k in range(0, n)])
@@ -43,12 +40,12 @@ def DHP(kernel, gamma, theta, law, n, mu):
             X_values[k] = np.random.poisson(alpha[0] + np.sum(alpha[k-1:0:-1] * X_values[1:k]))
             Sn[k] = Sn[k-1] + X_values[k]
 
-    mu = mu / (1 + alpha[0] - np.sum(alpha))  # on veut pas d'mu or np.sum(alpha) l'inclut
+    mu = mu / (1 + alpha[0] - np.sum(alpha))
 
     if law == "Bernouilli":
-        sigma_asy = mu * (1 - mu) / ((1 + alpha[0] - np.sum(alpha))**2)  # same
+        sigma_asy = mu * (1 - mu) / ((1 + alpha[0] - np.sum(alpha))**2)
     if law == "Poisson":
-        sigma_asy = mu / ((1 + alpha[0] - np.sum(alpha))**2)  # same
+        sigma_asy = mu / ((1 + alpha[0] - np.sum(alpha))**2)
 
     Sn_div_n = [Sn[k] / (k + 1) for k in range(0, n)]
     sigma_div = np.array([sigma_asy / np.sqrt(k + 1) for k in range(0, n)])
@@ -66,14 +63,7 @@ def DHP(kernel, gamma, theta, law, n, mu):
     plt.plot(Sn_div_n)
     plt.title("Sn/n")
     plt.axhline(mu, color="red")
-    plt.fill_between(
-        n_values,
-        lower,
-        upper,
-        color="orange",
-        alpha=0.2,
-        label="95% CI")
-
+    plt.fill_between(n_values, lower, upper, color="orange", alpha=0.2, label="95% CI")
     plt.plot(n_values, upper, color="orange", alpha=0.7)
     plt.plot(n_values, lower, color="orange", alpha=0.7)
     plt.xlabel("Index")
@@ -82,46 +72,28 @@ def DHP(kernel, gamma, theta, law, n, mu):
 
 
 # --- Continuous Hawkes Process (simulation by inverse-CDF) ---------------------
-# Let's try to code a continuous Hawkes Process
-# First let's try to just inverse the distribution function
-# Then we will use the Thinning d'Ogatta
-#
-# We can define it so easily and recursively just because we have an exponential
-# kernel, which allows to just multiply each time.
-# For calculation, I'll add a note on how we came to such an easy loop !
 def CHP(mu, beta, gamma, T_max):
-
     if gamma / beta >= 1:
         raise ValueError("Attention, il est nécessaire d'avoir : γ/β < 1 afin d'assurer la condition sur la fonction d'excitation")
 
-    # alpha 0 : intensité de fond (baseline)
-    # gamma : amplitude du noyau d'excitation
-    # beta : taux de décroissance
-
     T = 0
     phi = 0
-
     N = []
 
     while True:
         u = np.random.uniform(0, 1)
-        F = lambda delta: 1 - (np.exp(-mu * delta - phi * (1 - np.exp(-beta * delta)) / beta))  # Fonction de répartition de Δn+1 appliqué en δ (on part de la fonction de survie)
+        F = lambda delta: 1 - (np.exp(-mu * delta - phi * (1 - np.exp(-beta * delta)) / beta))
+        b = -np.log(1 - u) / mu + 1e-8
+        G_delta = brentq(lambda x: F(x) - u, 0, b)
 
-        b = -np.log(1 - u) / mu + 1e-8   # borne haute garantie (car S(b) >= 1-e^{-mu*b} = u) : résultat analytique (see the note)
-        # On utilise cette borne haute pour être sûr que S(b)>0 et donc que l'algo brentq (qui nécessite au moins une annulation sur l'intervalle fonctionne)
-
-        G_delta = brentq(lambda x: F(x) - u, 0, b)  # G_delta est une simulation de la variable aléatoire Δn+1
-
-        T = T + G_delta  # Tn+1 = Tn + Δn+1   (ici G_delta car on utilise une simulation)
+        T = T + G_delta
         if T > T_max:
-            break  # Permet de sortir de la boucle dès que le T calculé dépasse le T_max fixé
+            break
 
-        phi = phi * np.exp(-beta * G_delta) + gamma  # Φn+1 = Φn * exp(-β * Δn+1) + γ
-
-        N.append(T)  # N is totally encoded by (T1,...,Tn)
+        phi = phi * np.exp(-beta * G_delta) + gamma
+        N.append(T)
 
     N = np.array(N)
-
     return N
 
 
@@ -130,86 +102,54 @@ def CHP_plot(mu, beta, gamma, T_max):
     plt.step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
     plt.xlabel('t')
     plt.ylabel('N(t)')
-    plt.title('Processus de Hawkes continu')
+    plt.title(f'Processus de Hawkes continu (mu={mu}, beta={beta}, gamma={gamma})')
     plt.grid(True, alpha=0.3)
     plt.show()
 
 
 # --- Confidence intervals for the continuous process --------------------------
-# Confidence intervals which depend on v
-# We implement the analytic "solution"
-
 def CHP_IC(v, mu, beta, gamma, T_max):
-
     mean = (v * mu) / (1 - gamma / beta)
-
     sigma = np.sqrt(v * mu / (T_max * (1 - gamma / beta)**3))
-
     return mean, sigma
 
 
 def CHP_IC_plot(mu, beta, gamma, T_max):
     v = np.linspace(0, 1, 100)
-
     mean_v = CHP_IC(v, mu, beta, gamma, T_max)[0]
     sigma_v = CHP_IC(v, mu, beta, gamma, T_max)[1]
-
     lower = mean_v - 1.96 * sigma_v
     upper = mean_v + 1.96 * sigma_v
 
-    # Pour la boucle : ATTENTION, ça ne veut pas dire que 95% seront entièrement dans l'intervalle de confiance
-    # Notre intervalle de confiance fonctionne à v fixé, ça serait plutôt donc :
-    # à v fixé, 95% des 100 points (évaluation de la trajectoire en v) se situe dans l'intervalle de confiance
-
-    # Pour pouvoir déduire que 95% des trajectoires sont censées être situées dans notre intervalle, il faudrait qu'on ai un intervalle indépendant de v
-    # Ce qui est la prochaine étape
-
-    for k in range(1, 100):  # Pour afficher une multitude de simulations de trajectoires (indépendantes)
+    for k in range(1, 100):
         N = CHP(mu, beta, gamma, T_max)
-
         seuil = T_max * v
         N_T_v = np.searchsorted(N, seuil, side='right')
-
-        N_div = N_T_v / T_max  # = N(Tv)/T : c'est pour celui-ci qu'on veut faire un intervalle de confiance
+        N_div = N_T_v / T_max
         plt.plot(v, N_div, alpha=0.5)
 
-    plt.title("N(Tv)/T")
+    plt.title(f"N(Tv)/T (mu={mu}, beta={beta}, gamma={gamma})")
     plt.plot(v, mean_v, color="red")
-    plt.fill_between(
-        v,
-        lower,
-        upper,
-        color="orange",
-        alpha=0.2,
-        label="95% CI")
+    plt.fill_between(v, lower, upper, color="orange", alpha=0.2, label="95% CI")
     plt.legend()
     plt.show()
 
 
 # --- Univariate MLE -----------------------------------------------------------
-# The complexity should be O(len(time_stamp)) thanks to recursion
 def neg_log_likelihood(theta, time_stamp):
-
-    mu, R, beta = theta  # Where R is the branchement ratio (which should be 0<.<1)
-    # We use the branchement ratio, because it allows to use numerical methods more robusts to constraints
-
-    gamma = R * beta  # we recalculate gamma
+    mu, R, beta = theta
+    gamma = R * beta
 
     k = len(time_stamp)
     A = np.zeros(k)
-
     first_sum = np.log(mu + gamma * A[0])
 
-    # First sum
     for i in range(1, k):
         A[i] = (1 + A[i-1]) * np.exp(-beta * (time_stamp[i] - time_stamp[i-1]))
         first_sum += np.log(mu + gamma * A[i])
 
-    # Second sum
-
     last_time = time_stamp[k-1]
-
-    second_sum = np.sum((gamma / beta) * (np.exp(-beta * (last_time - time_stamp)) - 1))  # time_stamp is a vector, so everything inside np.sum is a vector
+    second_sum = np.sum((gamma / beta) * (np.exp(-beta * (last_time - time_stamp)) - 1))
 
     return -(first_sum - mu * last_time + second_sum)
 
@@ -223,53 +163,34 @@ def hawkes_residuals(theta, time_stamp):
     u = np.zeros(k - 1)
     A = np.zeros(k)
 
-    # we apply the change theorem
-    # We recursively calculate residuals : proof on paper
     for i in range(1, k):
         delta_t = time_stamp[i] - time_stamp[i-1]
-
         u[i-1] = mu * delta_t + (gamma / beta) * (1 - np.exp(-beta * delta_t)) * (1 + A[i-1])
-
-        # Update
         A[i] = (1 + A[i-1]) * np.exp(-beta * delta_t)
 
     return u
 
 
 # --- Excess-of-dispersion test ------------------------------------------------
-# Test of excess of dispersion
-# H0 : the variance of residuals is 1
 def engle_russell_ed_test(u):
-
     N = len(u)
-
-    # calculation of empirical dispersion (ddof = degrees of liberty = 1 to be unbiased)
     sigma2_hat = np.var(u, ddof=1)
-
-    # We calculate our test statistic (that follows N(0,1) when N-> +inf)
     Z_stat = np.sqrt(N) * (sigma2_hat - 1) / np.sqrt(8)
-
-    # bilateral p_value
     p_value = 2 * (1 - norm.cdf(np.abs(Z_stat)))
-
     return sigma2_hat, Z_stat, p_value
 
 
 # --- Bivariate MLE ------------------------------------------------------------
 def neg_log_likelihood_bivariate(theta, df):
+    mu1, mu2, R11, R21, R12, R22, beta1, beta2 = theta
 
-    mu1, mu2, R11, R21, R12, R22, beta1, beta2 = theta  # We use branchment ratio for numerical optimisation
-
-    # We deduce gamma using branchment ratio
     gamma11 = R11 * beta1
     gamma21 = R21 * beta1
     gamma12 = R12 * beta2
     gamma22 = R22 * beta2
 
-    # time_stamp and order type
     time_stamp = df['time_stamp'].to_numpy()
     side = df['side'].to_numpy()
-
     k = len(time_stamp)
 
     S1 = np.zeros(k + 1)
@@ -280,10 +201,8 @@ def neg_log_likelihood_bivariate(theta, df):
 
     first_sum = np.log(np.where(side[0] == 1, mu1, mu2))
 
-    # First sum
     for i in range(1, k):
         S1[i] = (side[i-1] + S1[i-1]) * np.exp(-beta1 * (time_stamp[i] - time_stamp[i-1]))
-
         S2[i] = ((1 - side[i-1]) + S2[i-1]) * np.exp(-beta2 * (time_stamp[i] - time_stamp[i-1]))
 
         if side[i] == 1:
@@ -291,24 +210,18 @@ def neg_log_likelihood_bivariate(theta, df):
         else:
             first_sum += np.log(mu2 + gamma21 * S1[i] + gamma22 * S2[i])
 
-    # Second sum
-
     last_time = time_stamp[k-1]
-
     S1[k] = side[k-1] + S1[k-1]
-
     S2[k] = (1 - side[k-1]) + S2[k-1]
 
     Re1 = N1 - S1[k]
     Re2 = N2 - S2[k]
-
     second_sum = (R11 + R21) * Re1 + (R12 + R22) * Re2
 
     return -(first_sum - (mu1 + mu2) * last_time - second_sum)
 
 
 # --- Bivariate constraints ----------------------------------------------------
-# Numerous constraints to respect :
 def spectral_det(theta):
     return (1.0 - theta[2]) * (1.0 - theta[5]) - (theta[4] * theta[3]) - 1e-5
 
@@ -336,44 +249,33 @@ def hawkes_residuals_bivariate(theta, df):
     Lambda1 = np.zeros(k)
     Lambda2 = np.zeros(k)
 
-    # The compensator at the first event, only depends on passed time
     Lambda1[0] = mu1 * time_stamp[0]
     Lambda2[0] = mu2 * time_stamp[0]
 
-    # Evaluation of the global compensator at each instant t_i
     for i in range(1, k):
         delta_t = time_stamp[i] - time_stamp[i-1]
-
         is_buy = side[i-1]
         is_sell = 1 - side[i-1]
 
-        # update of cumulative counts N(t)
         N1[i] = N1[i-1] + is_buy
         N2[i] = N2[i-1] + is_sell
 
-        # update of historical chocs S(t)
         S1[i] = (is_buy + S1[i-1]) * np.exp(-beta1 * delta_t)
         S2[i] = (is_sell + S2[i-1]) * np.exp(-beta2 * delta_t)
 
-        # We use the exact (analytical) primitive
         Lambda1[i] = mu1 * time_stamp[i] + R11 * (N1[i] - S1[i]) + R12 * (N2[i] - S2[i])
         Lambda2[i] = mu2 * time_stamp[i] + R21 * (N1[i] - S1[i]) + R22 * (N2[i] - S2[i])
 
-    # We use change time theorem
-    # We separate according to the side
     tau_1 = Lambda1[side == 1]
     tau_2 = Lambda2[side == 0]
 
-    # the residuals u_i are the time between events in the new reper
     u1 = np.diff(tau_1)
     u2 = np.diff(tau_2)
 
     return u1, u2
 
 
-
-
-# --- Univariate fit  -------------------------------------------------
+# --- Univariate fit  ----------------------------------------------------------
 def fit_univariate(time_stamp,
                    theta_init=np.array([0.5, 0.5, 0.3]),
                    bounds=((1e-5, None), (1e-5, 0.999), (1e-5, None)),
@@ -389,48 +291,41 @@ def fit_univariate(time_stamp,
     )
 
     if verbose:
-        print("\n--- RÉSULTATS DE L'ESTIMATION ---")
-        print(f"mu (baseline intensity) estimé      : {resultat.x[0]:.4f}")
-        print(f" Branchement Ratio (R) estimé   : {resultat.x[1]:.4f}")
-        print(f"Beta estimé        : {resultat.x[2]:.4f}")
-        print(f"-> Gamma déduit    : {(resultat.x[1] * resultat.x[2]):.4f}")
-        print(f"Succès             : {resultat.success}")
+        print("\n--- RESULTATS DE L'ESTIMATION (univarie) ---")
+        print(f"mu (baseline intensity) estime : {resultat.x[0]:.4f}")
+        print(f"Branching Ratio (R) estime     : {resultat.x[1]:.4f}")
+        print(f"Beta estime                    : {resultat.x[2]:.4f}")
+        print(f"-> Gamma deduit                : {(resultat.x[1] * resultat.x[2]):.4f}")
+        print(f"Succes                         : {resultat.success}")
 
     return resultat
 
 
-# --- Univariate goodness of fit ---------------------------------
+# --- Univariate goodness of fit -----------------------------------------------
 def univariate_goodness_of_fit(theta_estime, time_stamp, verbose=True):
-
-    # residuals estimated
     u = hawkes_residuals(theta_estime, time_stamp)
 
     if verbose:
-        print("--- Goodness of fit ---")
+        print("--- Goodness of fit (univarie) ---")
 
-    # TEST 1 : Kolmogorov-Smirnov (Marginal distribution Exp(1))
-    # H0 : data follows an Exp(1) distribution
     ks_stat, ks_pval = kstest(u, 'expon')
     if verbose:
         print(f"KS Test       -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
 
-    # TEST 2 : Ljung-Box (Linear AC until the 20th lag)
-    # H0 : residuals are independant (no autocorrelation)
     lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
     lb_pval = lb_result['lb_pvalue'].iloc[0]
     if verbose:
         print(f"Ljung-Box     -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
 
     sigma2_empirique, ed_stat, ed_pval = engle_russell_ed_test(u)
-
     if verbose:
-        print(f"empirical variance of résidus : {sigma2_empirique:.4f}")
+        print(f"Variance empirique des residus : {sigma2_empirique:.4f}")
         print(f"Engle-Russell ED Test -> Stat Z: {ed_stat:.4f} | p-value: {ed_pval:.4f}")
 
     return u, ks_pval, lb_pval, ed_pval
 
 
-# --- Univariate pass-rate loop  --------------------------------------
+# --- Univariate pass-rate loop  -----------------------------------------------
 def pass_rate_univariate(numerous_timestamps=None,
                          n_sim=10,
                          sim_params=dict(mu=1.0, beta=0.3, gamma=0.24, T_max=10000),
@@ -443,7 +338,6 @@ def pass_rate_univariate(numerous_timestamps=None,
     count_er = 0
     count_joint = 0
 
-    # Let's try to implement the pass_rate idea of the article
     if numerous_timestamps is None:
         numerous_timestamps = [CHP(**sim_params) for _ in range(n_sim)]
 
@@ -451,7 +345,6 @@ def pass_rate_univariate(numerous_timestamps=None,
 
     for k in range(taille):
         current_timestamps = numerous_timestamps[k]
-
         resultat = minimize(
             fun=neg_log_likelihood,
             x0=theta_init,
@@ -460,48 +353,40 @@ def pass_rate_univariate(numerous_timestamps=None,
             bounds=bounds,
             options={'maxiter': 2000, 'ftol': 1e-9}
         )
-
         theta_estimate = resultat.x
-
         u = hawkes_residuals(theta_estimate, current_timestamps)
 
         ks_stat, ks_pval = kstest(u, 'expon')
-
         lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
         lb_pval = lb_result['lb_pvalue'].iloc[0]
-
         _, _, er_pval = engle_russell_ed_test(u)
 
         if ks_pval > 0.05:
             count_ks += 1
-
         if lb_pval > 0.05:
             count_lb += 1
-
         if er_pval > 0.05:
             count_er += 1
-
         if ks_pval > 0.05 and lb_pval > 0.05 and er_pval > 0.05:
             count_joint += 1
 
     if verbose:
-        print("\n--- RÉSULTATS DES PASS RATES (sur 50 simulations) ---")
+        print(f"\n--- PASS RATES (univarie, sur {taille} simulations) ---")
         print(f"Pass Rate KS : {(count_ks / taille) * 100:.2f}%")
         print(f"Pass Rate LB : {(count_lb / taille) * 100:.2f}%")
         print(f"Pass Rate ED : {(count_er / taille) * 100:.2f}%")
-        print(f"Pass Rate Joint (KS ∩ LB ∩ ED) : {(count_joint / taille) * 100:.2f}%")
+        print(f"Pass Rate Joint (KS n LB n ED) : {(count_joint / taille) * 100:.2f}%")
 
     return count_ks, count_lb, count_er, count_joint, taille
 
 
-# --- Bivariate simulation (cell 20) -------------------------------------------
+# --- Bivariate simulation (tick) ----------------------------------------------
 def simulate_bivariate(baseline=np.array([0.3, 0.2]),
                        adjacency=np.array([[0.2, 0.1], [0.3, 0.15]]),
                        decays=np.array([[1.0, 1.0], [1.0, 1.0]]),
                        end_time=5000.0,
                        seed=42):
 
-    # --- Simulateur ---
     sim = SimuHawkesExpKernels(
         baseline=baseline,
         adjacency=adjacency,
@@ -522,9 +407,8 @@ def simulate_bivariate(baseline=np.array([0.3, 0.2]),
     return df_sim
 
 
-# --- Bivariate fit ----------------------------------------------
+# --- Bivariate fit ------------------------------------------------------------
 def _default_bivariate_bounds():
-    # Linear constraints
     return (
         (1e-5, None),  # 0: mu1 > 0
         (1e-5, None),  # 1: mu2 > 0
@@ -543,25 +427,17 @@ def fit_bivariate(df,
                   bounds=None,
                   constraints=None,
                   verbose=True):
-    """
-    method='trust-constr' -> uses NonlinearConstraint (cell 24)
-    method='SLSQP'        -> uses dict 'ineq' constraints (cell 25)
-    Pass your own `constraints` to override the method's default.
-    """
-
     if bounds is None:
         bounds = _default_bivariate_bounds()
 
     if constraints is None:
         if method == 'trust-constr':
-            # inequality constraints
             constraints = [
                 NonlinearConstraint(spectral_det, 1e-5, np.inf),
                 NonlinearConstraint(trace_1, 1e-5, np.inf),
                 NonlinearConstraint(trace_2, 1e-5, np.inf)
             ]
         else:
-            # Inequalities constraints
             constraints = [
                 {'type': 'ineq', 'fun': spectral_det},
                 {'type': 'ineq', 'fun': trace_1},
@@ -573,10 +449,10 @@ def fit_bivariate(df,
             fun=neg_log_likelihood_bivariate,
             x0=theta_init,
             args=(df,),
-            method='trust-constr',  # We try another algorithm : which is more robust to
+            method='trust-constr',
             bounds=bounds,
             constraints=constraints,
-            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': True}
+            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
         )
     else:
         resultat = minimize(
@@ -586,91 +462,63 @@ def fit_bivariate(df,
             method=method,
             bounds=bounds,
             constraints=constraints,
-            options={'maxiter': 2000, 'ftol': 1e-9, 'disp': True}
+            options={'maxiter': 2000, 'ftol': 1e-9, 'disp': False}
         )
 
     if verbose:
-            print("\n--- Bivariate: Estimated Results ---")
-            print(f"Optimization success : {resultat.success}")
-            print(f"Status               : {resultat.message}")
-
-            print("\n[Baseline intensity - mu]")
-            print(f"mu1 (Dimension 1) : {resultat.x[0]:.6f}")
-            print(f"mu2 (Dimension 2) : {resultat.x[1]:.6f}")
-
-            print("\n[Branching ratio matrix - R]")
-            print(f"R11 (Self-excitation 1->1) : {resultat.x[2]:.4f}")
-            print(f"R21 (Cross-excitation 1->2): {resultat.x[3]:.4f}")
-            print(f"R12 (Cross-excitation 2->1): {resultat.x[4]:.4f}")
-            print(f"R22 (Self-excitation 2->2) : {resultat.x[5]:.4f}")
-
-            print("\n[beta]")
-            print(f"beta1 (Decay / Shocks from 1) : {resultat.x[6]:.4f}")
-            print(f"beta2 (Decay / Shocks from 2) : {resultat.x[7]:.4f}")
-
-            print("\n[gamma]")
-            print(f"-> gamma11 : {(resultat.x[2] * resultat.x[6]):.4f}")
-            print(f"-> gamma21 : {(resultat.x[3] * resultat.x[6]):.4f}")
-            print(f"-> gamma12 : {(resultat.x[4] * resultat.x[7]):.4f}")
-            print(f"-> gamma22 : {(resultat.x[5] * resultat.x[7]):.4f}")
+        print("\n--- Bivariate: Estimated Results ---")
+        print(f"Optimization success : {resultat.success}")
+        print(f"Status               : {resultat.message}")
+        print("\n[Baseline intensity - mu]")
+        print(f"mu1 (Dimension 1) : {resultat.x[0]:.6f}")
+        print(f"mu2 (Dimension 2) : {resultat.x[1]:.6f}")
+        print("\n[Branching ratio matrix - R]")
+        print(f"R11 (Self-excitation 1->1) : {resultat.x[2]:.4f}")
+        print(f"R21 (Cross-excitation 1->2): {resultat.x[3]:.4f}")
+        print(f"R12 (Cross-excitation 2->1): {resultat.x[4]:.4f}")
+        print(f"R22 (Self-excitation 2->2) : {resultat.x[5]:.4f}")
+        print("\n[beta]")
+        print(f"beta1 (Decay / Shocks from 1) : {resultat.x[6]:.4f}")
+        print(f"beta2 (Decay / Shocks from 2) : {resultat.x[7]:.4f}")
 
     return resultat
 
 
-# --- Bivariate goodness of fit ----------------------------------
+# --- Bivariate goodness of fit ------------------------------------------------
 def bivariate_goodness_of_fit(theta_estimate, df, verbose=True):
-
-    # Estimated residuals
     u1, u2 = hawkes_residuals_bivariate(theta_estimate, df)
-
     residuals = [u1, u2]
     if verbose:
-        print("--- Goodness of fit ---")
+        print("--- Goodness of fit (bivarie) ---")
 
     results = []
     for u in residuals:
-        # TEST 1: Kolmogorov-Smirnov (marginal distribution Exp(1))
-        # H0: data follows an Exp(1) distribution
         ks_stat, ks_pval = kstest(u, "expon")
-        if verbose:
-            print(f"KS Test               -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
-            print()
-
-        # TEST 2: Ljung-Box (linear autocorrelation up to lag 20)
-        # H0: residuals are independent (no autocorrelation)
         lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
         lb_pval = lb_result["lb_pvalue"].iloc[0]
-        if verbose:
-            print(f"Ljung-Box             -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
-            print()
-
         sigma2_empirical, ed_stat, ed_pval = engle_russell_ed_test(u)
-
         if verbose:
-            print(f"Empirical variance of residuals: {sigma2_empirical:.4f}")
-            print(f"Engle-Russell ED Test -> Stat Z: {ed_stat:.4f} | p-value: {ed_pval:.4f}")
-            print()
-
+            print(f"KS: {ks_stat:.4f} (p={ks_pval:.4f}) | "
+                  f"LB: {lb_result['lb_stat'].iloc[0]:.4f} (p={lb_pval:.4f}) | "
+                  f"ED: {ed_stat:.4f} (p={ed_pval:.4f}) | var={sigma2_empirical:.4f}")
         results.append((ks_pval, lb_pval, ed_pval))
 
     return (u1, u2), results
 
 
-# --- Bivariate pass-rate loop ---------------------------------------
+# --- Bivariate pass-rate loop -------------------------------------------------
 def pass_rate_bivariate_sim(numerous_dfs=None,
-                        n_sim=10,
-                        baseline=np.array([0.3, 0.2]),
-                        adjacency=np.array([[0.2, 0.1], [0.3, 0.15]]),
-                        decays=np.array([[1.0, 1.0], [1.0, 1.0]]),
-                        end_time=5000.0,
-                        theta_init=np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9]),
-                        bounds=None,
-                        constraints=None,
-                        verbose=True):
-
+                            n_sim=10,
+                            baseline=np.array([0.3, 0.2]),
+                            adjacency=np.array([[0.2, 0.1], [0.3, 0.15]]),
+                            decays=np.array([[1.0, 1.0], [1.0, 1.0]]),
+                            end_time=5000.0,
+                            theta_init=np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9]),
+                            bounds=None,
+                            constraints=None,
+                            verbose=True):
     if bounds is None:
         bounds = _default_bivariate_bounds()
-
     if constraints is None:
         constraints = [
             NonlinearConstraint(spectral_det, 1e-5, np.inf),
@@ -678,103 +526,66 @@ def pass_rate_bivariate_sim(numerous_dfs=None,
             NonlinearConstraint(trace_2, 1e-5, np.inf)
         ]
 
-    # All our counters
     count_ks_1, count_ks_2 = 0, 0
     count_lb_1, count_lb_2 = 0, 0
     count_er_1, count_er_2 = 0, 0
     count_joint_1, count_joint_2 = 0, 0
     count_global_joint = 0
 
-    taille = n_sim  # Number of simulations we want
+    taille = n_sim
 
-    # Generation of bivariate simulations (using tick)
     if numerous_dfs is None:
-        numerous_dfs = []
-        for i in range(taille):
-            sim = SimuHawkesExpKernels(
-                baseline=baseline,
-                adjacency=adjacency,
-                decays=decays,
-                end_time=end_time,
-                seed=i,
-                verbose=False,
-            )
-
-            sim.simulate()
-            t_buy, t_sell = sim.timestamps[0], sim.timestamps[1]
-
-            df_sim = pd.concat([
-                pd.DataFrame({"time_stamp": t_buy,  "side": 1}),
-                pd.DataFrame({"time_stamp": t_sell, "side": 0}),
-            ], ignore_index=True).sort_values("time_stamp").reset_index(drop=True)
-
-            numerous_dfs.append(df_sim)
+        numerous_dfs = [simulate_bivariate(baseline, adjacency, decays, end_time, seed=i)
+                        for i in range(taille)]
     else:
         taille = len(numerous_dfs)
 
-    # Evaluation Loop
     for k in range(taille):
         current_df = numerous_dfs[k]
 
-        # Optimization SLSQP
+        # [MODIF 4] correction : args=(current_df,) (au lieu de df_sim)
         resultat = minimize(
             fun=neg_log_likelihood_bivariate,
             x0=theta_init,
-            args=(df_sim,),
-            method='trust-constr',  # We try another algorithm : which is more robust to
+            args=(current_df,),
+            method='trust-constr',
             bounds=bounds,
             constraints=constraints,
-            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': True}
+            options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
         )
 
-        # Two vectors of residuals
         u1, u2 = hawkes_residuals_bivariate(resultat.x, current_df)
 
-        # Test on dim=1 (Buy)
         _, ks_pval_1 = kstest(u1, 'expon')
         lb_pval_1 = acorr_ljungbox(u1, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
         _, _, er_pval_1 = engle_russell_ed_test(u1)
-
         pass_ks_1 = ks_pval_1 > 0.05
         pass_lb_1 = lb_pval_1 > 0.05
         pass_er_1 = er_pval_1 > 0.05
-
         if pass_ks_1: count_ks_1 += 1
         if pass_lb_1: count_lb_1 += 1
         if pass_er_1: count_er_1 += 1
         if pass_ks_1 and pass_lb_1 and pass_er_1: count_joint_1 += 1
 
-        # Test on dim=2 (Sell)
         _, ks_pval_2 = kstest(u2, 'expon')
         lb_pval_2 = acorr_ljungbox(u2, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
         _, _, er_pval_2 = engle_russell_ed_test(u2)
-
         pass_ks_2 = ks_pval_2 > 0.05
         pass_lb_2 = lb_pval_2 > 0.05
         pass_er_2 = er_pval_2 > 0.05
-
         if pass_ks_2: count_ks_2 += 1
         if pass_lb_2: count_lb_2 += 1
         if pass_er_2: count_er_2 += 1
         if pass_ks_2 and pass_lb_2 and pass_er_2: count_joint_2 += 1
 
-        # Strict Global Test (everything needs to pass)
         if (pass_ks_1 and pass_lb_1 and pass_er_1) and (pass_ks_2 and pass_lb_2 and pass_er_2):
             count_global_joint += 1
 
-    # Every Pass_Rates
     if verbose:
-        print(f"\n--- PASS RATE RESULTS (out of {taille} simulations) ---")
-        print("\n[Dimension 1 - Buys]")
-        print(f"KS : {(count_ks_1 / taille) * 100:.2f}% | LB : {(count_lb_1 / taille) * 100:.2f}% | ED : {(count_er_1 / taille) * 100:.2f}%")
-        print(f"Joint 1 : {(count_joint_1 / taille) * 100:.2f}%")
-
-        print("\n[Dimension 2 - Sells]")
-        print(f"KS : {(count_ks_2 / taille) * 100:.2f}% | LB : {(count_lb_2 / taille) * 100:.2f}% | ED : {(count_er_2 / taille) * 100:.2f}%")
-        print(f"Joint 2 : {(count_joint_2 / taille) * 100:.2f}%")
-
-        print("\n[Global Bivariate Model]")
-        print(f"Strict Validation (Intersection of all 6 tests) : {(count_global_joint / taille) * 100:.2f}%")
+        print(f"\n--- PASS RATE (bivarie, {taille} simulations) ---")
+        print(f"[Dim 1 - Buys ] KS {(count_ks_1/taille)*100:.1f}% | LB {(count_lb_1/taille)*100:.1f}% | ED {(count_er_1/taille)*100:.1f}% | Joint {(count_joint_1/taille)*100:.1f}%")
+        print(f"[Dim 2 - Sells] KS {(count_ks_2/taille)*100:.1f}% | LB {(count_lb_2/taille)*100:.1f}% | ED {(count_er_2/taille)*100:.1f}% | Joint {(count_joint_2/taille)*100:.1f}%")
+        print(f"[Global 6 tests] {(count_global_joint/taille)*100:.1f}%")
 
     return {
         "ks_1": count_ks_1, "lb_1": count_lb_1, "er_1": count_er_1, "joint_1": count_joint_1,
@@ -783,191 +594,89 @@ def pass_rate_bivariate_sim(numerous_dfs=None,
     }
 
 
-if __name__ == "__main__":
+# --- Bivariate sum-of-exponentials --------------------------------------------
+def neg_log_likelihood_bivariate_sum_exp(theta_sum, df):
+    mu1, mu2, R11_1, R21_1, R12_1, R22_1, R11_2, R21_2, R12_2, R22_2, \
+        beta1_1, beta2_1, beta1_2, beta2_2 = theta_sum
 
-    # ----- Discrete Hawkes demos (cells 2-3) -----
-    DHP("Exponential", 0.2, 0.3, "Poisson", 100, 0.01)
-
-    DHP("Exponential", 0.05, 0.5, "Bernouilli", 1000, 0.01)
-    DHP("Exponential", 0.10, 0.5, "Bernouilli", 1000, 0.01)
-    DHP("Exponential", 0.20, 0.5, "Bernouilli", 1000, 0.01)
-    DHP("Exponential", 0.30, 0.5, "Bernouilli", 1000, 0.01)
-
-    # ----- Continuous Hawkes demos (cells 6-7) -----
-    mu = 1.0    # baseline intensity
-    gamma = 0.8    # amplitude du noyau
-    beta = 1.0    # decay
-    T_max = 50.0   # horizon
-
-    CHP_plot(mu, beta, gamma, T_max)
-
-    CHP_plot(mu=0.7, beta=5, gamma=1, T_max=50)
-    CHP_plot(mu=1.0, beta=1.0, gamma=0.9, T_max=50)
-    CHP_plot(mu=0.5, beta=1.0, gamma=0.95, T_max=20)
-    CHP_plot(mu=1.0, beta=5.0, gamma=4.0, T_max=30)
-    CHP_plot(mu=1.0, beta=0.3, gamma=0.24, T_max=100)
-    CHP_plot(mu=0.2, beta=1.0, gamma=0.85, T_max=100)
-
-    # ----- Confidence interval demos (cells 11-12) -----
-    CHP_IC_plot(mu, beta, gamma, T_max)
-    CHP_IC_plot(mu=0.4, beta=5, gamma=1, T_max=50)
-    CHP_IC_plot(mu=1.0, beta=1.0, gamma=0.9, T_max=50)
-    CHP_IC_plot(mu=0.5, beta=1.0, gamma=0.95, T_max=50)
-    CHP_IC_plot(mu=1.0, beta=5.0, gamma=4.0, T_max=50)
-    CHP_IC_plot(mu=1.0, beta=0.3, gamma=0.24, T_max=50)
-    CHP_IC_plot(mu=0.2, beta=1.0, gamma=0.85, T_max=50)
-
-    # ----- Univariate fit (cells 13-15) -----
-    time_stamp = CHP(mu=1.0, beta=0.3, gamma=0.24, T_max=10000)
-    resultat = fit_univariate(time_stamp)
-
-    # ----- Univariate goodness of fit (cells 17-18) -----
-    theta_estime = [1.0055, 0.7997, 0.2981]
-    univariate_goodness_of_fit(theta_estime, time_stamp)
-
-    # ----- Univariate pass-rate loop (cell 19) -----
-    pass_rate_univariate(n_sim=10)
-
-    # ----- Bivariate simulation (cell 20) -----
-    df_sim = simulate_bivariate()
-    print(df_sim.head())
-
-    # ----- Bivariate fit : trust-constr (cell 24) -----
-    resultat = fit_bivariate(df_sim, method='trust-constr')
-
-    # ----- Bivariate fit : SLSQP (cell 25) -----
-    resultat = fit_bivariate(df_sim, method='SLSQP')
-
-    # ----- Bivariate residuals + goodness of fit (cells 27-28) -----
-    theta_estimate = [resultat.x[i] for i in range(8)]
-    bivariate_goodness_of_fit(theta_estimate, df_sim)
-
-    # ----- Bivariate pass-rate loop (cell 29) -----
-    pass_rate_bivariate(n_sim=10)
-
-
-
-
-def neg_log_likelihood_bivariate_sum_exp(theta_sum,df):
-
-
-    #We now have 14 parameters
-    mu1, mu2, R11_1 , R21_1, R12_1, R22_1 , R11_2 , R21_2, R12_2, R22_2, beta1_1, beta2_1, beta1_2, beta2_2 = theta_sum
-
-    
     gamma11_1 = R11_1 * beta1_1
     gamma21_1 = R21_1 * beta1_1
     gamma12_1 = R12_1 * beta2_1
     gamma22_1 = R22_1 * beta2_1
-
     gamma11_2 = R11_2 * beta1_2
     gamma21_2 = R21_2 * beta1_2
     gamma12_2 = R12_2 * beta2_2
     gamma22_2 = R22_2 * beta2_2
 
-    #time_stamp and order type
     time_stamp = df['time_stamp'].to_numpy()
     side = df['side'].to_numpy()
+    k = len(time_stamp)
 
-    k=len(time_stamp)
-    
-    S1_1 = np.zeros(k+1)
-    S2_1 = np.zeros(k+1)
+    S1_1 = np.zeros(k + 1)
+    S2_1 = np.zeros(k + 1)
+    S1_2 = np.zeros(k + 1)
+    S2_2 = np.zeros(k + 1)
 
-    S1_2 = np.zeros(k+1)
-    S2_2 = np.zeros(k+1)
+    N1 = side.sum()
+    N2 = k - N1
 
-    N1=side.sum()
-    N2=k-N1
+    first_sum = np.log(np.where(side[0] == 1, mu1, mu2))
 
+    for i in range(1, k):
+        dt = time_stamp[i] - time_stamp[i-1]
+        S1_1[i] = (side[i-1] + S1_1[i-1]) * np.exp(-beta1_1 * dt)
+        S2_1[i] = ((1 - side[i-1]) + S2_1[i-1]) * np.exp(-beta2_1 * dt)
+        S1_2[i] = (side[i-1] + S1_2[i-1]) * np.exp(-beta1_2 * dt)
+        S2_2[i] = ((1 - side[i-1]) + S2_2[i-1]) * np.exp(-beta2_2 * dt)
 
-    first_sum=np.log(np.where(side[0]==1, mu1, mu2))
-
-    # First sum
-    for i in range(1,k):
-        S1_1[i]=(side[i-1] + S1_1[i-1])*np.exp(-beta1_1*(time_stamp[i]-time_stamp[i-1]))
-        
-        S2_1[i]=((1-side[i-1]) + S2_1[i-1])*np.exp(-beta2_1*(time_stamp[i]-time_stamp[i-1]))
-
-        S1_2[i]=(side[i-1] + S1_2[i-1])*np.exp(-beta1_2*(time_stamp[i]-time_stamp[i-1]))
-        
-        S2_2[i]=((1-side[i-1]) + S2_2[i-1])*np.exp(-beta2_2*(time_stamp[i]-time_stamp[i-1]))
-
-        if side[i]==1:
+        if side[i] == 1:
             intensity = mu1 + gamma11_1*S1_1[i] + gamma12_1*S2_1[i] + gamma11_2*S1_2[i] + gamma12_2*S2_2[i]
         else:
             intensity = mu2 + gamma21_1*S1_1[i] + gamma22_1*S2_1[i] + gamma21_2*S1_2[i] + gamma22_2*S2_2[i]
 
         first_sum += np.log(max(intensity, 1e-300))
 
-
-    # Second sum
-
-    last_time=time_stamp[k-1] 
-
+    last_time = time_stamp[k-1]
     S1_1[k] = side[k-1] + S1_1[k-1]
-        
-    S2_1[k] = (1-side[k-1]) + S2_1[k-1]
-
+    S2_1[k] = (1 - side[k-1]) + S2_1[k-1]
     S1_2[k] = side[k-1] + S1_2[k-1]
-        
-    S2_2[k] = (1-side[k-1]) + S2_2[k-1]
-
+    S2_2[k] = (1 - side[k-1]) + S2_2[k-1]
 
     Re1_1 = N1 - S1_1[k]
-    Re2_1 = N2 - S2_1[k]  
-
+    Re2_1 = N2 - S2_1[k]
     Re1_2 = N1 - S1_2[k]
-    Re2_2 = N2 - S2_2[k]  
+    Re2_2 = N2 - S2_2[k]
 
     second_sum = (R11_1 + R21_1)*Re1_1 + (R12_1 + R22_1)*Re2_1 + (R11_2 + R21_2)*Re1_2 + (R12_2 + R22_2)*Re2_2
 
-    
-    nll = -(first_sum - (mu1+mu2)*last_time - second_sum)
-
+    nll = -(first_sum - (mu1 + mu2)*last_time - second_sum)
     if not np.isfinite(nll):
         return 1e10
-
     return nll
 
-def fit_bivariate_sum_exp(df,
-                          theta_init,
-                          verbose=True):
-    
 
-    
-    bounds_sum = (
-    (1e-5, None),   # 0: mu1 > 0
-    (1e-5, None),   # 1: mu2 > 0
-    (0.0, 1.0),     # 2: R11_1
-    (0.0, 1.0),     # 3: R21_1
-    (0.0, 1.0),     # 4: R12_1
-    (0.0, 1.0),     # 5: R22_1
-    (0.0, 1.0),     # 6: R11_2
-    (0.0, 1.0),     # 7: R21_2
-    (0.0, 1.0),     # 8: R12_2
-    (0.0, 1.0),     # 9: R22_2
-    (1e-3, 20.0),  # 10: beta1_1
-    (1e-3, 20.0),  # 11: beta2_1
-    (300, 1500.0),  # 12: beta1_2
-    (300, 1500.0)   # 13: beta2_2
-    )
+def fit_bivariate_sum_exp(df, theta_init, bounds_sum=None, verbose=True):
+    if bounds_sum is None:
+        bounds_sum = (
+            (1e-5, None), (1e-5, None),
+            (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+            (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+            (1e-3, 20.0), (1e-3, 20.0),
+            (300, 1500.0), (300, 1500.0)
+        )
 
     def spectral_det_sum(theta):
         r11 = theta[2] + theta[6]
         r21 = theta[3] + theta[7]
         r12 = theta[4] + theta[8]
         r22 = theta[5] + theta[9]
-        # det(I - R) > 0 <=> (1 - r11)(1 - r22) - r12 * r21 > 0
         return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
 
-    
-    # 4 linear constraints (2 traces + 2 beta orderings) packed into a matrix
     A = np.zeros((4, 14))
-    A[0, 2] = 1.0;  A[0, 6] = 1.0       # R11_1 + R11_2 <= 1 - eps
-    A[1, 5] = 1.0;  A[1, 9] = 1.0       # R22_1 + R22_2 <= 1 - eps
-    A[2, 12] = 1.0; A[2, 10] = -1.0     # beta1_2 - beta1_1 >= 1e-3
-    A[3, 13] = 1.0; A[3, 11] = -1.0     # beta2_2 - beta2_1 >= 1e-3
+    A[0, 2] = 1.0;  A[0, 6] = 1.0
+    A[1, 5] = 1.0;  A[1, 9] = 1.0
+    A[2, 12] = 1.0; A[2, 10] = -1.0
+    A[3, 13] = 1.0; A[3, 11] = -1.0
     lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
     ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
 
@@ -983,50 +692,21 @@ def fit_bivariate_sum_exp(df,
         method='trust-constr',
         bounds=bounds_sum,
         constraints=constraints,
-        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': True}
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
     )
 
     if verbose:
         x = resultat.x
         print("\n--- Bivariate Sum-Exp : Estimated results ---")
-        print(f"Succès de l'optimisation : {resultat.success}")
-        print(f"Statut                   : {resultat.message}")
-
-        print("\n[Baseline intensity - mu]")
-        print(f"mu1 (Dimension 1) : {x[0]:.6f}")
-        print(f"mu2 (Dimension 2) : {x[1]:.6f}")
-
-        r11 = x[2] + x[6]
-        r21 = x[3] + x[7]
-        r12 = x[4] + x[8]
-        r22 = x[5] + x[9]
-        print("\n[Branchement ratio total - R = R^(1) + R^(2)]")
-        print(f"R11 (Auto 1->1)   : {r11:.4f}  (comp1 {x[2]:.4f}, comp2 {x[6]:.4f})")
-        print(f"R21 (Croisée 1->2): {r21:.4f}  (comp1 {x[3]:.4f}, comp2 {x[7]:.4f})")
-        print(f"R12 (Croisée 2->1): {r12:.4f}  (comp1 {x[4]:.4f}, comp2 {x[8]:.4f})")
-        print(f"R22 (Auto 2->2)   : {r22:.4f}  (comp1 {x[5]:.4f}, comp2 {x[9]:.4f})")
-
+        print(f"Succes : {resultat.success} | {resultat.message}")
+        r11 = x[2] + x[6]; r21 = x[3] + x[7]; r12 = x[4] + x[8]; r22 = x[5] + x[9]
         rho = np.max(np.abs(np.linalg.eigvals(np.array([[r11, r12], [r21, r22]]))))
-        print(f"Rayon spectral    : {rho:.4f} (doit être < 1)")
-
-        print("\n[beta]")
-        print(f"Source 1 (Buy)  : beta^(1) = {x[10]:.4f} | beta^(2) = {x[12]:.4f}")
-        print(f"Source 2 (Sell) : beta^(1) = {x[11]:.4f} | beta^(2) = {x[13]:.4f}")
-
-        print("\n[gamma = R * beta]")
-        print("--- Composante 1 ---")
-        print(f"gamma11_1 : {x[2]*x[10]:.4f} | gamma21_1 : {x[3]*x[10]:.4f}")
-        print(f"gamma12_1 : {x[4]*x[11]:.4f} | gamma22_1 : {x[5]*x[11]:.4f}")
-        print("--- Composante 2 ---")
-        print(f"gamma11_2 : {x[6]*x[12]:.4f} | gamma21_2 : {x[7]*x[12]:.4f}")
-        print(f"gamma12_2 : {x[8]*x[13]:.4f} | gamma22_2 : {x[9]*x[13]:.4f}")
+        print(f"R total: R11={r11:.3f} R21={r21:.3f} R12={r12:.3f} R22={r22:.3f} | rayon spectral={rho:.3f}")
 
     return resultat
 
 
 def hawkes_residuals_bivariate_sum_exp(theta_sum, df):
-
-    # 14 parameters (same layout as the sum-exp likelihood)
     mu1, mu2, R11_1, R21_1, R12_1, R22_1, R11_2, R21_2, R12_2, R22_2, \
         beta1_1, beta2_1, beta1_2, beta2_2 = theta_sum
 
@@ -1034,97 +714,99 @@ def hawkes_residuals_bivariate_sum_exp(theta_sum, df):
     side = df.iloc[:, 1].to_numpy()
     k = len(time_stamp)
 
-    # 4 states : source (1=buy, 2=sell) x scale (1, 2)
-    S1_1 = np.zeros(k)
-    S2_1 = np.zeros(k)
-    S1_2 = np.zeros(k)
-    S2_2 = np.zeros(k)
+    S1_1 = np.zeros(k); S2_1 = np.zeros(k)
+    S1_2 = np.zeros(k); S2_2 = np.zeros(k)
+    N1 = np.zeros(k); N2 = np.zeros(k)
+    Lambda1 = np.zeros(k); Lambda2 = np.zeros(k)
 
-    # cumulative counts
-    N1 = np.zeros(k)
-    N2 = np.zeros(k)
-
-    Lambda1 = np.zeros(k)
-    Lambda2 = np.zeros(k)
-
-    # The compensator at the first event only depends on passed time
     Lambda1[0] = mu1 * time_stamp[0]
     Lambda2[0] = mu2 * time_stamp[0]
 
-    # Evaluation of the global compensator at each instant t_i
     for i in range(1, k):
-        delta_t = time_stamp[i] - time_stamp[i-1]
-
+        dt = time_stamp[i] - time_stamp[i-1]
         is_buy = side[i-1]
         is_sell = 1 - side[i-1]
 
-        # update of cumulative counts N(t)
         N1[i] = N1[i-1] + is_buy
         N2[i] = N2[i-1] + is_sell
 
-        # update of the 4 historical shock states S(t)
-        S1_1[i] = (is_buy  + S1_1[i-1]) * np.exp(-beta1_1 * delta_t)
-        S2_1[i] = (is_sell + S2_1[i-1]) * np.exp(-beta2_1 * delta_t)
-        S1_2[i] = (is_buy  + S1_2[i-1]) * np.exp(-beta1_2 * delta_t)
-        S2_2[i] = (is_sell + S2_2[i-1]) * np.exp(-beta2_2 * delta_t)
+        S1_1[i] = (is_buy + S1_1[i-1]) * np.exp(-beta1_1 * dt)
+        S2_1[i] = (is_sell + S2_1[i-1]) * np.exp(-beta2_1 * dt)
+        S1_2[i] = (is_buy + S1_2[i-1]) * np.exp(-beta1_2 * dt)
+        S2_2[i] = (is_sell + S2_2[i-1]) * np.exp(-beta2_2 * dt)
 
-        # exact (analytical) primitive, summed over the 2 scales
         Lambda1[i] = (mu1 * time_stamp[i]
                       + R11_1 * (N1[i] - S1_1[i]) + R12_1 * (N2[i] - S2_1[i])
                       + R11_2 * (N1[i] - S1_2[i]) + R12_2 * (N2[i] - S2_2[i]))
-
         Lambda2[i] = (mu2 * time_stamp[i]
                       + R21_1 * (N1[i] - S1_1[i]) + R22_1 * (N2[i] - S2_1[i])
                       + R21_2 * (N1[i] - S1_2[i]) + R22_2 * (N2[i] - S2_2[i]))
 
-    # change-of-time theorem, separated by side
     tau_1 = Lambda1[side == 1]
     tau_2 = Lambda2[side == 0]
-
-    # residuals u_i = inter-event times in the new (compensated) clock
     u1 = np.diff(tau_1)
     u2 = np.diff(tau_2)
-
     return u1, u2
 
 
-    #---
-
 def bivariate_goodness_of_fit_sum_exp(theta_estimate, df, verbose=True):
-
-    # residuals estimated
     u1, u2 = hawkes_residuals_bivariate_sum_exp(theta_estimate, df)
-
     residuals = [u1, u2]
     if verbose:
-        print("--- Goodness of fit ---")
+        print("--- Goodness of fit (sum-exp) ---")
 
     results = []
     for u in residuals:
-        # TEST 1 : Kolmogorov-Smirnov (Marginal distribution Exp(1))
-        # H0 : data follows an Exp(1) distribution
         ks_stat, ks_pval = kstest(u, 'expon')
-        if verbose:
-            print(f"KS Test       -> Stat: {ks_stat:.4f} | p-value: {ks_pval:.4f}")
-
-        # TEST 2 : Ljung-Box (Linear AC until the 20th lag)
-        # H0 : residuals are independant (no autocorrelation)
         lb_result = acorr_ljungbox(u, lags=[20], return_df=True)
         lb_pval = lb_result['lb_pvalue'].iloc[0]
-        if verbose:
-            print(f"Ljung-Box     -> Stat: {lb_result['lb_stat'].iloc[0]:.4f} | p-value: {lb_pval:.4f}")
-
         sigma2_empirique, ed_stat, ed_pval = engle_russell_ed_test(u)
-
         if verbose:
-            print(f"empirical variance of résidus : {sigma2_empirique:.4f}")
-            print(f"Engle-Russell ED Test -> Stat Z: {ed_stat:.4f} | p-value: {ed_pval:.4f}")
-
+            print(f"KS: {ks_stat:.4f} (p={ks_pval:.4f}) | "
+                  f"LB: {lb_result['lb_stat'].iloc[0]:.4f} (p={lb_pval:.4f}) | "
+                  f"ED: {ed_stat:.4f} (p={ed_pval:.4f}) | var={sigma2_empirique:.4f}")
         results.append((ks_pval, lb_pval, ed_pval))
 
     return (u1, u2), results
 
 
+# --- Window evaluation helpers ------------------------------------------------
+# [MODIF 3] fonction manquante ajoutee (analogue mono-exp de _eval_window_sum_exp)
+def _eval_window_bivariate(current_df, bounds, constraints):
+    t_w = current_df['time_stamp'].to_numpy()
+    side_w = current_df['side'].to_numpy()
+    T_w = t_w[-1]
+    N1 = side_w.sum(); N2 = len(side_w) - N1
+    dt_mean = np.mean(np.diff(t_w))
+
+    theta_start = np.array([
+        max((N1 / T_w) * 0.5, 1e-3), max((N2 / T_w) * 0.5, 1e-3),
+        0.1, 0.1, 0.1, 0.1,
+        1.0 / dt_mean, 1.0 / dt_mean,
+    ])
+
+    resultat = minimize(
+        fun=neg_log_likelihood_bivariate,
+        x0=theta_start,
+        args=(current_df,),
+        method='trust-constr',
+        bounds=bounds,
+        constraints=constraints,
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False}
+    )
+
+    u1, u2 = hawkes_residuals_bivariate(resultat.x, current_df)
+
+    out = {}
+    for dim, u in [(1, u1), (2, u2)]:
+        _, ks_p = kstest(u, 'expon')
+        lb_p = acorr_ljungbox(u, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
+        sigma2, _, er_p = engle_russell_ed_test(u)
+        out[dim] = {
+            'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'sigma2': sigma2,
+            'pass_ks': ks_p > 0.05, 'pass_lb': lb_p > 0.05, 'pass_er': er_p > 0.05,
+        }
+    return out
 
 
 def _eval_window_sum_exp(current_df, bounds, constraints):
@@ -1160,19 +842,19 @@ def _eval_window_sum_exp(current_df, bounds, constraints):
         lb_p = acorr_ljungbox(u, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
         sigma2, _, er_p = engle_russell_ed_test(u)
         out[dim] = {
-            'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'ks_stat': _ if False else None,
-            'sigma2': sigma2,
+            'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'sigma2': sigma2,
             'pass_ks': ks_p > 0.05, 'pass_lb': lb_p > 0.05, 'pass_er': er_p > 0.05,
         }
     return out
 
 
+# --- QQ overlay ---------------------------------------------------------------
 def qq_overlay(resid_mono, resid_sum, title=""):
     def quantiles(u):
         u_sorted = np.sort(u)
         n = len(u_sorted)
         p = (np.arange(1, n + 1) - 0.5) / n
-        return expon.ppf(p), u_sorted   # (theoritical, empirical)
+        return expon.ppf(p), u_sorted
 
     theo_m, emp_m = quantiles(resid_mono)
     theo_s, emp_s = quantiles(resid_sum)
@@ -1184,7 +866,7 @@ def qq_overlay(resid_mono, resid_sum, title=""):
     lim = max(theo_m.max(), emp_m.max(), theo_s.max(), emp_s.max())
     plt.plot([0, lim], [0, lim], 'k--', label="y = x (fit parfait)")
 
-    plt.xlabel("Theorical Quantile Exp(1)")
+    plt.xlabel("Theoretical Quantile Exp(1)")
     plt.ylabel("Empirical Quantiles of residuals")
     plt.title(f"QQ-plot : mono-exp vs sum-exp — {title}")
     plt.legend()
@@ -1192,14 +874,11 @@ def qq_overlay(resid_mono, resid_sum, title=""):
     plt.show()
 
 
-def _sample_random_windows(t: np.ndarray, side: np.ndarray,
-                            duration: float, n_per_size: int,
-                            rng: np.random.Generator, min_points: int,
-                            max_attempts_factor: int = 20):
-
+# --- Window sampling / aggregation --------------------------------------------
+def _sample_random_windows(t, side, duration, n_per_size, rng, min_points,
+                           max_attempts_factor=20):
     t = np.asarray(t)
     side = np.asarray(side)
-
     T_total = t[-1]
     n_valid = 0
     attempts = 0
@@ -1207,32 +886,24 @@ def _sample_random_windows(t: np.ndarray, side: np.ndarray,
 
     while n_valid < n_per_size and attempts < max_attempts:
         attempts += 1
-
         start = rng.uniform(0, T_total - duration)
         end = start + duration
         mask = (t >= start) & (t < end)
-
         if mask.sum() < min_points:
             continue
-
         t_win = t[mask] - t[mask][0]
         side_win = side[mask]
-
         n_valid += 1
         yield pd.DataFrame({"time_stamp": t_win, "side": side_win})
 
 
-def _aggregate_pass_rates(t: np.ndarray, side: np.ndarray,
-                           eval_window_fn, bounds, constraints,
-                           sizes_min: tuple, n_per_size: int,
-                           seed: int, min_points: int) -> dict:
-    
+def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
+                          sizes_min, n_per_size, seed, min_points):
     rng = np.random.default_rng(seed)
     results = {}
 
     for size_min in sizes_min:
         duration = size_min * 60
-
         counts = {1: dict(ks=0, lb=0, er=0, joint=0),
                   2: dict(ks=0, lb=0, er=0, joint=0)}
         count_global = 0
@@ -1246,7 +917,6 @@ def _aggregate_pass_rates(t: np.ndarray, side: np.ndarray,
                 res = eval_window_fn(df_win, bounds, constraints)
             except Exception:
                 continue
-
             n_valid += 1
             for dim in (1, 2):
                 r = res[dim]
@@ -1256,9 +926,8 @@ def _aggregate_pass_rates(t: np.ndarray, side: np.ndarray,
                 if r["pass_ks"] and r["pass_lb"] and r["pass_er"]:
                     counts[dim]["joint"] += 1
                 sigma2_list[dim].append(r["sigma2"])
-
             if (res[1]["pass_ks"] and res[1]["pass_lb"] and res[1]["pass_er"] and
-                res[2]["pass_ks"] and res[2]["pass_lb"] and res[2]["pass_er"]):
+                    res[2]["pass_ks"] and res[2]["pass_lb"] and res[2]["pass_er"]):
                 count_global += 1
 
         results[size_min] = {
@@ -1272,8 +941,7 @@ def _aggregate_pass_rates(t: np.ndarray, side: np.ndarray,
     return results
 
 
-def _print_pass_rate_summary(results: dict, sizes_min: tuple):
-    # Print the standard pass-rate-by-window-size report.
+def _print_pass_rate_summary(results, sizes_min):
     for size_min in sizes_min:
         r = results[size_min]
         n = r["n_valid"]
@@ -1290,38 +958,27 @@ def _print_pass_rate_summary(results: dict, sizes_min: tuple):
         print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
 
 
-def pass_rate_by_window_size_bivariate(t, side,
-                                        sizes_min=(5, 10, 20),
-                                        n_per_size=10,
-                                        seed=42,
-                                        min_points=30,
-                                        verbose=True):
-    # Pass-rate study across window sizes for the classic bivariate Hawkes model.
+def pass_rate_by_window_size_bivariate(t, side, sizes_min=(5, 10, 20),
+                                       n_per_size=10, seed=42, min_points=30,
+                                       verbose=True):
     bounds = _default_bivariate_bounds()
     constraints = [
         NonlinearConstraint(spectral_det, 1e-5, np.inf),
         NonlinearConstraint(trace_1, 1e-5, np.inf),
         NonlinearConstraint(trace_2, 1e-5, np.inf),
     ]
-
     results = _aggregate_pass_rates(
         t, side, _eval_window_bivariate, bounds, constraints,
         sizes_min, n_per_size, seed, min_points,
     )
-
     if verbose:
         _print_pass_rate_summary(results, sizes_min)
-
     return results
 
 
-def pass_rate_by_window_size_sum_exp(t, side,
-                                      sizes_min=(5, 10, 20),
-                                      n_per_size=10,
-                                      seed=42,
-                                      min_points=50,
-                                      verbose=True):
-    # Pass-rate study across window sizes for the sum-of-exponentials Hawkes model.
+def pass_rate_by_window_size_sum_exp(t, side, sizes_min=(5, 10, 20),
+                                     n_per_size=10, seed=42, min_points=50,
+                                     verbose=True):
     bounds = (
         (1e-5, None), (1e-5, None),
         (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
@@ -1350,28 +1007,19 @@ def pass_rate_by_window_size_sum_exp(t, side,
         t, side, _eval_window_sum_exp, bounds, constraints,
         sizes_min, n_per_size, seed, min_points,
     )
-
     if verbose:
         _print_pass_rate_summary(results, sizes_min)
-
     return results
 
 
-
-def compare_kernels_by_window_size(t, side,
-                                    sizes_min=(5, 10, 20),
-                                    n_per_size=10,
-                                    seed=42,
-                                    verbose=True):
-    # Same seed for the two kernels : for clean comparison 
-
+def compare_kernels_by_window_size(t, side, sizes_min=(5, 10, 20),
+                                   n_per_size=10, seed=42, verbose=True):
     results_biv = pass_rate_by_window_size_bivariate(
         t, side, sizes_min=sizes_min, n_per_size=n_per_size, seed=seed, verbose=False,
     )
     results_sum = pass_rate_by_window_size_sum_exp(
         t, side, sizes_min=sizes_min, n_per_size=n_per_size, seed=seed, verbose=False,
     )
-
     if verbose:
         print(f"{'Window':<10} {'Model':<12} {'Global pass rate':<18} {'n valid'}")
         print("-" * 55)
@@ -1382,5 +1030,4 @@ def compare_kernels_by_window_size(t, side,
                 rate = f"{100 * r['global'] / n:.1f}%" if n > 0 else "n/a"
                 print(f"{size_min} min{'':<4} {label:<12} {rate:<18} {n}")
             print()
-
     return {"bivariate": results_biv, "sum_exp": results_sum}
