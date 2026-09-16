@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-from .model import _default_bivariate_bounds, spectral_det, trace_1, trace_2
+from model import _default_bivariate_bounds, spectral_det, trace_1, trace_2
 
 from scipy.optimize import minimize, NonlinearConstraint,LinearConstraint
 
