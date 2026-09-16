@@ -96,9 +96,9 @@ def run_real_data(
 
 if __name__ == "__main__":
     
-    chemin = "../data/binance_trades_2026-09-01_BTCUSDT.csv.gz"
+    path = "../data/binance_trades_2026-09-01_BTCUSDT.csv.gz"
     
-    df_btc = pd.read_csv(chemin)
+    df_btc = pd.read_csv(path)
     
     run_real_data(
         raw_df=df_btc, 
