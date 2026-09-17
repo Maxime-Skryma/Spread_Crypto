@@ -93,7 +93,7 @@ def DHP(kernel, gamma, theta, law, n, mu):
 # --- Continuous Hawkes Process (simulation by inverse-CDF) ---------------------
 def CHP(mu, beta, gamma, T_max):
     if gamma / beta >= 1:
-        raise ValueError("Attention, il est nécessaire d'avoir : γ/β < 1 afin d'assurer la condition sur la fonction d'excitation")
+        raise ValueError("Be aware : we need gamma/beta <1 for stationnarity")
 
     T = 0
     phi = 0
@@ -121,7 +121,7 @@ def CHP_plot(mu, beta, gamma, T_max):
     plt.step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
     plt.xlabel('t')
     plt.ylabel('N(t)')
-    plt.title(f'Processus de Hawkes continu (mu={mu}, beta={beta}, gamma={gamma})')
+    plt.title(f'Continuous Hawkes Process with (mu={mu}, beta={beta}, gamma={gamma})')
     plt.grid(True, alpha=0.3)
     plt.show()
 
@@ -225,9 +225,12 @@ def neg_log_likelihood_bivariate(theta, df):
         S2[i] = ((1 - side[i-1]) + S2[i-1]) * np.exp(-beta2 * (time_stamp[i] - time_stamp[i-1]))
 
         if side[i] == 1:
-            first_sum += np.log(mu1 + gamma11 * S1[i] + gamma12 * S2[i])
+            intensity = mu1 + gamma11 * S1[i] + gamma12 * S2[i]
         else:
-            first_sum += np.log(mu2 + gamma21 * S1[i] + gamma22 * S2[i])
+            intensity = mu2 + gamma21 * S1[i] + gamma22 * S2[i]
+        
+        first_sum += np.log(max(intensity, 1e-300))
+
 
     last_time = time_stamp[k-1]
     S1[k] = side[k-1] + S1[k-1]
@@ -237,8 +240,13 @@ def neg_log_likelihood_bivariate(theta, df):
     Re2 = N2 - S2[k]
     second_sum = (R11 + R21) * Re1 + (R12 + R22) * Re2
 
-    return -(first_sum - (mu1 + mu2) * last_time - second_sum)
-
+    nll = -(first_sum - (mu1 + mu2) * last_time - second_sum)
+ 
+    # safety
+    if not np.isfinite(nll):
+        return 1e10
+ 
+    return nll
 
 # --- Bivariate constraints ----------------------------------------------------
 def spectral_det(theta):
@@ -564,7 +572,6 @@ def pass_rate_bivariate_sim(numerous_dfs=None,
     for k in range(taille):
         current_df = numerous_dfs[k]
 
-        # [MODIF 4] correction : args=(current_df,) (au lieu de df_sim)
         resultat = minimize(
             fun=neg_log_likelihood_bivariate,
             x0=theta_init,
