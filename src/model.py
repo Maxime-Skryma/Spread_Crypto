@@ -820,7 +820,6 @@ def bivariate_goodness_of_fit_sum_exp(theta_estimate, df, verbose=True):
 
 
 # --- Window evaluation helpers ------------------------------------------------
-# [MODIF 3] fonction manquante ajoutee (analogue mono-exp de _eval_window_sum_exp)
 def _eval_window_bivariate(current_df, bounds, constraints):
     t_w = current_df['time_stamp'].to_numpy()
     side_w = current_df['side'].to_numpy()
@@ -961,6 +960,7 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
 
         windows = _sample_random_windows(t, side, duration, n_per_size, rng, min_points)
 
+        #We change our global counter : we +1 if it passes at least two tests : we relaxed a bit compared to the article 'Quantifying endogeneity of cryptocurrency markets'
         for df_win in windows:
             try:
                 res = eval_window_fn(df_win, bounds, constraints)
@@ -975,8 +975,7 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
                 if r["pass_ks"] and r["pass_lb"] and r["pass_er"]:
                     counts[dim]["joint"] += 1
                 sigma2_list[dim].append(r["sigma2"])
-            if (res[1]["pass_ks"] and res[1]["pass_lb"] and res[1]["pass_er"] and
-                    res[2]["pass_ks"] and res[2]["pass_lb"] and res[2]["pass_er"]):
+            if (res[1]["pass_ks"] and res[1]["pass_lb"]) and (res[1]["pass_ks"] and res[1]["pass_er"]) and (res[1]["pass_lb"] and res[1]["pass_er"]):
                 count_global += 1
 
         results[size_min] = {
