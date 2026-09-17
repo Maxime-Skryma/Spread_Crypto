@@ -92,8 +92,7 @@ def DHP(kernel, gamma, theta, law, n, mu):
 
 # --- Continuous Hawkes Process (simulation by inverse-CDF) ---------------------
 def CHP(mu, beta, gamma, T_max):
-    if gamma / beta >= 1:
-        raise ValueError("Be aware : we need gamma/beta <1 for stationnarity")
+
 
     T = 0
     phi = 0
