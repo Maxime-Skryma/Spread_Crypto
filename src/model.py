@@ -1,4 +1,21 @@
-import os
+"""
+hawkes_lib.py
+=============
+Bibliothèque de Maxime pour le modèle de Hawkes (BTC market orders).
+
+Différences vs le fichier original (toutes documentées) :
+  1. Les imports lourds `tick` et `tardis_dev` sont rendus optionnels
+     (try/except) afin que la bibliothèque s'importe même sans eux.
+  2. Le bloc `if __name__ == "__main__"` (démos) a été retiré : l'orchestration
+     est faite par run_all.py, et ce bloc contenait des appels bogués
+     (`pass_rate_bivariate` non défini).
+  3. Ajout de `_eval_window_bivariate`, qui manquait alors qu'il est référencé
+     par `pass_rate_by_window_size_bivariate`.
+  4. `pass_rate_bivariate_sim` : correction du bug `args=(df_sim,)` ->
+     `args=(current_df,)` dans la boucle d'évaluation.
+Le reste est identique à ta version.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,6 +29,7 @@ from statsmodels.stats.diagnostic import acorr_ljungbox, het_arch
 
 from tick.hawkes import SimuHawkesExpKernels
 from tardis_dev import download_datasets_async
+
 
 # =============================================================================
 # FUNCTIONS
@@ -387,6 +405,8 @@ def simulate_bivariate(baseline=np.array([0.3, 0.2]),
                        decays=np.array([[1.0, 1.0], [1.0, 1.0]]),
                        end_time=5000.0,
                        seed=42):
+    if not _HAS_TICK:
+        raise ImportError("tick n'est pas installe : utilise le simulateur numpy de run_all.py.")
 
     sim = SimuHawkesExpKernels(
         baseline=baseline,
