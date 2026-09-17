@@ -138,7 +138,7 @@ def CHP_plot(mu, beta, gamma, T_max, n_grid=2000):
     axes[1].legend(); axes[1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show())
+    plt.show()
 
 
 # --- Confidence intervals for the continuous process --------------------------
