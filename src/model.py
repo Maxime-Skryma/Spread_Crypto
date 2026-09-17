@@ -113,14 +113,32 @@ def CHP(mu, beta, gamma, T_max):
 
     return np.array(N), np.array(Phi)
 
-def CHP_plot(mu, beta, gamma, T_max):
-    N = CHP(mu, beta, gamma, T_max)
-    plt.step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
-    plt.xlabel('t')
-    plt.ylabel('N(t)')
-    plt.title(f'Continuous Hawkes Process with (mu={mu}, beta={beta}, alpha={gamma})')
-    plt.grid(True, alpha=0.3)
-    plt.show()
+def intensity_path(t_grid, mu, beta, N, Phi):
+    idx = np.searchsorted(N, t_grid, side='right') - 1  
+    has_event = idx >= 0
+    t_last = np.where(has_event, N[np.clip(idx, 0, None)], 0.0)
+    E_last = np.where(has_event, Phi[np.clip(idx, 0, None)], 0.0)
+    return mu + E_last * np.exp(-beta * (t_grid - t_last))
+
+
+def CHP_plot(mu, beta, gamma, T_max, n_grid=2000):
+    N, Phi = CHP(mu, beta, gamma, T_max)
+
+    fig, axes = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
+
+    axes[0].step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
+    axes[0].set_ylabel('N(t)')
+
+    t_grid = np.linspace(0, T_max, n_grid)
+    lam = intensity_path(t_grid, mu, beta, N, Phi)
+    axes[1].plot(t_grid, lam, lw=1)
+    axes[1].axhline(mu, color='red', ls='--', lw=1, label=r'$\mu$')
+    axes[1].scatter(N, mu + Phi, color='black', s=8, zorder=3, label=r'$\lambda^*(T_n^+)$')
+    axes[1].set_xlabel('t'); axes[1].set_ylabel(r'$\lambda^*(t)$')
+    axes[1].legend(); axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show())
 
 
 # --- Confidence intervals for the continuous process --------------------------
@@ -138,7 +156,7 @@ def CHP_IC_plot(mu, beta, gamma, T_max):
     upper = mean_v + 1.96 * sigma_v
 
     for k in range(1, 100):
-        N = CHP(mu, beta, gamma, T_max)
+        N, _ = CHP(mu, beta, gamma, T_max)
         seuil = T_max * v
         N_T_v = np.searchsorted(N, seuil, side='right')
         N_div = N_T_v / T_max
