@@ -6,7 +6,8 @@ import pandas as pd
 from model import (
     fit_bivariate, bivariate_goodness_of_fit,
     fit_bivariate_sum_exp, bivariate_goodness_of_fit_sum_exp,
-    compare_kernels_by_window_size, qq_overlay
+    compare_kernels_by_window_size, qq_overlay,
+    plot_params_across_day,
 )
 from data import (
     build_hawkes_dataframe, initialize_hawkes_params,
@@ -14,14 +15,32 @@ from data import (
 )
 
 
+def plot_price_volatility(raw_df, price_col='price', freq='1min', vol_window=30):
+    d = raw_df.copy()
+    d['dt'] = pd.to_datetime(d['timestamp'], unit='us', utc=True)
+    d = d.set_index('dt').sort_index()
+    price = d[price_col].resample(freq).last().ffill()
+    vol = np.log(price).diff().rolling(vol_window).std()
+    h = (price.index - price.index[0]).total_seconds() / 3600.0
+
+    fig, ax1 = plt.subplots(figsize=(14, 3))
+    ax1.plot(h, price.values, color='navy', lw=0.7, label='Price')
+    ax1.set_ylabel('Price (USD)'); ax1.set_xlabel('heure dans la serie (h)')
+    ax2 = ax1.twinx(); ax2.plot(h, vol.values, color='deepskyblue', lw=0.7, label='Volatility')
+    ax2.set_ylabel('Std returns horaires')
+    ax1.set_title('Prix & volatilite'); plt.tight_layout(); plt.show()
+
+
 def run_real_data(
     raw_df,
     out_dir="results",
     window_start="2026-09-01 13:05:00",
     window_end="2026-09-01 13:10:00",
-    win_sizes=(5, 10, 20),                 # size of windows : but it will be tested on all day
+    win_sizes=(5, 10, 20, 60),                 # size of windows : but it will be tested on all day
     n_windows=10,
-    seed=42
+    seed=42,
+    roll_sizes=(10),               
+    roll_min_points=30,                
 ):
     os.makedirs(out_dir, exist_ok=True)
 
@@ -34,12 +53,11 @@ def run_real_data(
         plt.close()
     plt.show = save_and_close
 
-    try:                           
+    try:
         with open(f"{out_dir}/results_summary.txt", "w") as f:
             f.write("=== REAL DATA RESULTS ===\n")
             f.write(f"Window : {window_start} -> {window_end}\n\n")
 
-    
             ts = pd.to_datetime(raw_df["timestamp"], unit="us", utc=True)
             start = pd.to_datetime(window_start, utc=True)
             end = pd.to_datetime(window_end, utc=True)
@@ -125,10 +143,43 @@ def run_real_data(
                 r_b, r_s = res_win["bivariate"][w], res_win["sum_exp"][w]
                 p_b = f"{100*r_b['global']/r_b['n_valid']:.1f}%" if r_b['n_valid'] > 0 else "N/A"
                 p_s = f"{100*r_s['global']/r_s['n_valid']:.1f}%" if r_s['n_valid'] > 0 else "N/A"
-                f.write(f"{str(w)+' min':<10} | {'Bivariate':<12} | {p_b:<10} | {r_b['n_valid']}\n")
-                f.write(f"{str(w)+' min':<10} | {'Sum-Exp':<12} | {p_s:<10} | {r_s['n_valid']}\n")
 
-    finally:                               
+                f.write(f"{str(w)+' min':<10} | {'Bivariate':<12} | {p_b:<10} | {r_b['n_valid']}\n")
+                if r_b['n_valid'] > 0:
+                    for dim, lab in [(1, "Buy"), (2, "Sell")]:
+                        s = r_b['stat_mean'][dim]
+                        f.write(f"{'':<10} |   {lab+' (t moy.)':<10} | "
+                                f"KS={s['ks']:.3f}  LB={s['lb']:.1f}  ED={s['er']:.3f}\n")
+
+                f.write(f"{str(w)+' min':<10} | {'Sum-Exp':<12} | {p_s:<10} | {r_s['n_valid']}\n")
+                if r_s['n_valid'] > 0:
+                    for dim, lab in [(1, "Buy"), (2, "Sell")]:
+                        s = r_s['stat_mean'][dim]
+                        f.write(f"{'':<10} |   {lab+' (t moy.)':<10} | "
+                                f"KS={s['ks']:.3f}  LB={s['lb']:.1f}  ED={s['er']:.3f}\n")
+
+            plot_price_volatility(raw_df)
+
+            res_roll_mono = plot_params_across_day(
+                t_full, side_full, sizes_min=roll_sizes, kernel='mono',
+                min_points=roll_min_points,
+            )
+            res_roll_sum = plot_params_across_day(
+                t_full, side_full, sizes_min=roll_sizes, kernel='sum',
+                min_points=roll_min_points,
+            )
+
+            f.write("\n--- Rolling params (median sur la journee) ---\n")
+            for name, res_roll in [("Mono-Exp", res_roll_mono), ("Sum-Exp", res_roll_sum)]:
+                for w in roll_sizes:
+                    d = res_roll[w]
+                    if len(d):
+                        f.write(f"{name:<9} {w} min : mu_tot~{d['mu_tot'].median():.4f} | "
+                                f"eta~{d['eta'].median():.3f} | n_fenetres={len(d)}\n")
+                    else:
+                        f.write(f"{name:<9} {w} min : aucune fenetre valide\n")
+
+    finally:
         plt.show = original_show
 
 
@@ -141,8 +192,9 @@ if __name__ == "__main__":
     run_real_data(
         raw_df=df_btc,
         out_dir="btc_results",
-        window_start="2026-09-01 13:05:00",   # 1:05 pm (UTC)
-        window_end="2026-09-01 13:10:00",     # 1:10 pm (UTC)
+        window_start="2026-09-01 13:05:00",   # 1:00 pm (UTC)
+        window_end="2026-09-01 13:10:00",     # 1:05 pm (UTC)
         win_sizes=(5, 10, 20),
-        n_windows=10
+        n_windows=10,
+        roll_sizes=(10, 30, 60),
     )

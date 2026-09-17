@@ -1,21 +1,3 @@
-"""
-hawkes_lib.py
-=============
-Bibliothèque de Maxime pour le modèle de Hawkes (BTC market orders).
-
-Différences vs le fichier original (toutes documentées) :
-  1. Les imports lourds `tick` et `tardis_dev` sont rendus optionnels
-     (try/except) afin que la bibliothèque s'importe même sans eux.
-  2. Le bloc `if __name__ == "__main__"` (démos) a été retiré : l'orchestration
-     est faite par run_all.py, et ce bloc contenait des appels bogués
-     (`pass_rate_bivariate` non défini).
-  3. Ajout de `_eval_window_bivariate`, qui manquait alors qu'il est référencé
-     par `pass_rate_by_window_size_bivariate`.
-  4. `pass_rate_bivariate_sim` : correction du bug `args=(df_sim,)` ->
-     `args=(current_df,)` dans la boucle d'évaluation.
-Le reste est identique à ta version.
-"""
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -847,11 +829,14 @@ def _eval_window_bivariate(current_df, bounds, constraints):
 
     out = {}
     for dim, u in [(1, u1), (2, u2)]:
-        _, ks_p = kstest(u, 'expon')
-        lb_p = acorr_ljungbox(u, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
-        sigma2, _, er_p = engle_russell_ed_test(u)
+        ks_t, ks_p = kstest(u, 'expon')                             
+        lb_df = acorr_ljungbox(u, lags=[20], return_df=True)
+        lb_t = lb_df['lb_stat'].iloc[0]                            
+        lb_p = lb_df['lb_pvalue'].iloc[0]
+        sigma2, er_t, er_p = engle_russell_ed_test(u)               
         out[dim] = {
             'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'sigma2': sigma2,
+            'ks_t': ks_t, 'lb_t': lb_t, 'er_t': er_t,              
             'pass_ks': ks_p > 0.05, 'pass_lb': lb_p > 0.05, 'pass_er': er_p > 0.05,
         }
     return out
@@ -886,12 +871,15 @@ def _eval_window_sum_exp(current_df, bounds, constraints):
 
     out = {}
     for dim, u in [(1, u1), (2, u2)]:
-        _, ks_p = kstest(u, 'expon')
-        lb_p = acorr_ljungbox(u, lags=[20], return_df=True)['lb_pvalue'].iloc[0]
-        sigma2, _, er_p = engle_russell_ed_test(u)
+        ks_t, ks_p = kstest(u, 'expon')
+        lb_df = acorr_ljungbox(u, lags=[20], return_df=True)
+        lb_t = lb_df['lb_stat'].iloc[0]                             # <-- corrige (etait ['lb_pvalue'].iloc[1])
+        lb_p = lb_df['lb_pvalue'].iloc[0]
+        sigma2, er_t, er_p = engle_russell_ed_test(u)
         out[dim] = {
             'ks_p': ks_p, 'lb_p': lb_p, 'er_p': er_p, 'sigma2': sigma2,
             'pass_ks': ks_p > 0.05, 'pass_lb': lb_p > 0.05, 'pass_er': er_p > 0.05,
+            'ks_t': ks_t, 'lb_t': lb_t, 'er_t': er_t,
         }
     return out
 
@@ -957,10 +945,11 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
         count_global = 0
         n_valid = 0
         sigma2_list = {1: [], 2: []}
+        stat_list = {1: dict(ks=[], lb=[], er=[]),                  # <-- AJOUT
+                     2: dict(ks=[], lb=[], er=[])}
 
         windows = _sample_random_windows(t, side, duration, n_per_size, rng, min_points)
 
-        #We change our global counter : we +1 if it passes at least two tests : we relaxed a bit compared to the article 'Quantifying endogeneity of cryptocurrency markets'
         for df_win in windows:
             try:
                 res = eval_window_fn(df_win, bounds, constraints)
@@ -975,6 +964,9 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
                 if r["pass_ks"] and r["pass_lb"] and r["pass_er"]:
                     counts[dim]["joint"] += 1
                 sigma2_list[dim].append(r["sigma2"])
+                stat_list[dim]["ks"].append(r["ks_t"])              # <-- AJOUT
+                stat_list[dim]["lb"].append(r["lb_t"])              # <-- AJOUT
+                stat_list[dim]["er"].append(r["er_t"])              # <-- AJOUT
             if (res[1]["pass_ks"] and res[1]["pass_lb"]) and (res[1]["pass_ks"] and res[1]["pass_er"]) and (res[1]["pass_lb"] and res[1]["pass_er"]):
                 count_global += 1
 
@@ -984,6 +976,9 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
             "global": count_global,
             "sigma2_median": {d: (np.median(sigma2_list[d]) if sigma2_list[d] else np.nan)
                               for d in (1, 2)},
+            "stat_mean": {d: {test: (np.mean(stat_list[d][test]) if stat_list[d][test] else np.nan)  # <-- AJOUT
+                              for test in ("ks", "lb", "er")}
+                          for d in (1, 2)},
         }
 
     return results
@@ -999,11 +994,12 @@ def _print_pass_rate_summary(results, sizes_min):
         print(f"\n=== {size_min}-min windows  ({n} windows) ===")
         for dim, label in [(1, "Buys"), (2, "Sells")]:
             c = r["counts"][dim]
+            s = r["stat_mean"][dim]                                 # <-- AJOUT
             print(f"  [{label}]  KS {100*c['ks']/n:.0f}% | "
                   f"LB {100*c['lb']/n:.0f}% | ED {100*c['er']/n:.0f}% | "
                   f"Joint {100*c['joint']/n:.0f}%  "
                   f"(median residual variance: {r['sigma2_median'][dim]:.3f})")
-        print(f"  [Global 6 tests] {100*r['global']/n:.0f}%")
+            print(f"           stats moy.: KS={s['ks']:.3f} | LB={s['lb']:.1f} | ED={s['er']:.3f}")  # <-- AJOUT
 
 
 def pass_rate_by_window_size_bivariate(t, side, sizes_min=(5, 10, 20),
@@ -1079,3 +1075,114 @@ def compare_kernels_by_window_size(t, side, sizes_min=(5, 10, 20),
                 print(f"{size_min} min{'':<4} {label:<12} {rate:<18} {n}")
             print()
     return {"bivariate": results_biv, "sum_exp": results_sum}
+
+def _fit_window_sum_exp(current_df, bounds, constraints):
+    t_w   = current_df['time_stamp'].to_numpy()
+    side_w = current_df['side'].to_numpy()
+    T_w = t_w[-1]
+    N1 = side_w.sum(); N2 = len(side_w) - N1
+    dt_mean = np.mean(np.diff(t_w))
+
+    theta_start = np.array([
+        (N1 / T_w) * 0.3, (N2 / T_w) * 0.3,
+        0.15, 0.15, 0.10, 0.15,
+        0.05, 0.05, 0.05, 0.05,
+        1.0 / (20 * dt_mean), 1.0 / (20 * dt_mean),
+        1.0 / dt_mean,        1.0 / dt_mean,
+    ])
+    res = minimize(
+        fun=neg_log_likelihood_bivariate_sum_exp, x0=theta_start, args=(current_df,),
+        method='trust-constr', bounds=bounds, constraints=constraints,
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False},
+    )
+    return res.x, res.success
+
+
+def estimate_params_rolling(t, side, size_min, kernel='mono',
+                            step_min=None, min_points=30):
+    t = np.asarray(t); side = np.asarray(side)
+    duration = size_min * 60.0
+    step = duration if step_min is None else step_min * 60.0
+
+    if kernel == 'mono':
+        fit_fn = _fit_window_bivariate
+        bounds = _default_bivariate_bounds()
+        constraints = [
+            NonlinearConstraint(spectral_det, 1e-5, np.inf),
+            NonlinearConstraint(trace_1, 1e-5, np.inf),
+            NonlinearConstraint(trace_2, 1e-5, np.inf),
+        ]
+        def branching(theta):
+            return np.array([[theta[2], theta[4]],
+                             [theta[3], theta[5]]])
+    elif kernel == 'sum':
+        fit_fn = _fit_window_sum_exp
+        bounds = (
+            (1e-5, None), (1e-5, None),
+            (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+            (0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
+            (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0), (1e-3, 1000.0),
+        )
+        def spectral_det_sum(theta):
+            r11 = theta[2] + theta[6]; r21 = theta[3] + theta[7]
+            r12 = theta[4] + theta[8]; r22 = theta[5] + theta[9]
+            return (1.0 - r11) * (1.0 - r22) - (r12 * r21) - 1e-5
+        A = np.zeros((4, 14))
+        A[0, 2] = 1.0;  A[0, 6] = 1.0
+        A[1, 5] = 1.0;  A[1, 9] = 1.0
+        A[2, 12] = 1.0; A[2, 10] = -1.0
+        A[3, 13] = 1.0; A[3, 11] = -1.0
+        lb = np.array([-np.inf, -np.inf, 1e-3, 1e-3])
+        ub = np.array([1.0 - 1e-5, 1.0 - 1e-5, np.inf, np.inf])
+        constraints = [LinearConstraint(A, lb, ub),
+                       NonlinearConstraint(spectral_det_sum, 1e-5, np.inf)]
+        def branching(theta):
+            return np.array([[theta[2] + theta[6], theta[4] + theta[8]],   # R total = echelle1 + echelle2
+                             [theta[3] + theta[7], theta[5] + theta[9]]])
+    else:
+        raise ValueError("kernel doit etre 'mono' ou 'sum'")
+
+    T_total = t[-1]
+    rows = []
+    start = 0.0
+    while start + duration <= T_total:
+        end = start + duration
+        mask = (t >= start) & (t < end)
+        if mask.sum() >= min_points:
+            df_win = pd.DataFrame({'time_stamp': t[mask] - t[mask][0], 'side': side[mask]})
+            try:
+                theta, ok = fit_fn(df_win, bounds, constraints)
+                eta = np.max(np.abs(np.linalg.eigvals(branching(theta))))
+                rows.append({'center_h': (start + duration/2) / 3600.0,
+                             'mu1': theta[0], 'mu2': theta[1], 'mu_tot': theta[0] + theta[1],
+                             'eta': eta, 'n': int(mask.sum()), 'ok': ok})
+            except Exception:
+                pass
+        start += step
+    return pd.DataFrame(rows)
+
+
+def plot_params_across_day(t, side, sizes_min=(10, 30, 60), kernel='mono', min_points=30):
+    colors = {10: 'green', 30: 'red', 60: 'orange'}
+    res = {s: estimate_params_rolling(t, side, s, kernel=kernel, min_points=min_points)
+           for s in sizes_min}
+
+    fig, (ax_mu, ax_eta) = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
+    for s in sizes_min:
+        d = res[s]
+        if len(d) == 0:
+            continue
+        ax_mu.plot(d['center_h'],  d['mu_tot'], '.', ms=4, color=colors.get(s), label=f'{s} min')
+        ax_eta.plot(d['center_h'], d['eta'],    '.', ms=4, color=colors.get(s), label=f'{s} min')
+
+    kern = 'mono-exp' if kernel == 'mono' else 'sum-exp'
+    ax_mu.set_ylabel(r'Baseline $\mu_1+\mu_2$ (evts/s)')
+    ax_mu.set_title(f'Parametres en fenetres glissantes ({kern})')
+    ax_mu.legend(); ax_mu.grid(alpha=0.3)
+    ax_eta.axhline(1.0, color='k', ls='--', lw=0.8)
+    ax_eta.set_ylim(0, 1.05); ax_eta.set_xlabel('heure dans la serie (h)')
+    ax_eta.set_ylabel(r'Branching ratio $\eta = \rho(R)$')
+    ax_eta.legend(); ax_eta.grid(alpha=0.3)
+    plt.tight_layout(); plt.show()
+    return res
+
