@@ -1,3 +1,4 @@
 
 # Abstract
 We model the arrival dynamics of Bitcoin market orders with a bivariate Hawkes process whose excitation kernel is a sum of exponentials. After recalling the continuous-time theory (point processes, conditional intensity, self-excitation), we derive the maximum-likelihood estimator and give a closed-form, $O(k)$-computable log-likelihood for the univariate, bivariate and sum-of-exponentials cases, exploiting the Markovian structure of exponential kernels. We then detail an exact simulation scheme and discuss stationarity and asymptotic behaviour.
+

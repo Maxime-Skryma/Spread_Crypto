@@ -92,11 +92,10 @@ def DHP(kernel, gamma, theta, law, n, mu):
 
 # --- Continuous Hawkes Process (simulation by inverse-CDF) ---------------------
 def CHP(mu, beta, gamma, T_max):
-
-
     T = 0
     phi = 0
     N = []
+    Phi = []
 
     while True:
         u = np.random.uniform(0, 1)
@@ -110,17 +109,16 @@ def CHP(mu, beta, gamma, T_max):
 
         phi = phi * np.exp(-beta * G_delta) + gamma
         N.append(T)
+        Phi.append(phi)  # To follow intensity evolution
 
-    N = np.array(N)
-    return N
-
+    return np.array(N), np.array(Phi)
 
 def CHP_plot(mu, beta, gamma, T_max):
     N = CHP(mu, beta, gamma, T_max)
     plt.step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
     plt.xlabel('t')
     plt.ylabel('N(t)')
-    plt.title(f'Continuous Hawkes Process with (mu={mu}, beta={beta}, gamma={gamma})')
+    plt.title(f'Continuous Hawkes Process with (mu={mu}, beta={beta}, alpha={gamma})')
     plt.grid(True, alpha=0.3)
     plt.show()
 
