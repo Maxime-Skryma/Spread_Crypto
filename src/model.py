@@ -126,8 +126,12 @@ def CHP_plot(mu, beta, gamma, T_max, n_grid=2000):
 
     fig, axes = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
 
+    title = f"Hawkes Processe and its intensity function, with (mu={mu}, beta={beta}, alpha={gamma})"
+    fig.suptitle(title, fontsize=14)
+
     axes[0].step(np.concatenate([[0], N]), np.arange(len(N) + 1), where='post')
     axes[0].set_ylabel('N(t)')
+    
 
     t_grid = np.linspace(0, T_max, n_grid)
     lam = intensity_path(t_grid, mu, beta, N, Phi)
