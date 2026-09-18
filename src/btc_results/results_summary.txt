@@ -1,0 +1,34 @@
+=== REAL DATA RESULTS ===
+Window : 2026-09-01 13:05:00 -> 2026-09-01 13:10:00
+
+Events in window : 6266 (buys=3983, sells=2283)
+
+--- Global Bivariate Fit (Mono-Exp) ---
+Dim 1 (Buy)  -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+Dim 2 (Sell) -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+
+--- Global Bivariate Fit (Sum-Exp) ---
+Dim 1 (Buy)  -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+Dim 2 (Sell) -> KS: 0.0405 | LB: 0.0000 | ED: 0.4764
+
+--- Window Comparison (sampled across the full day) ---
+Window     | Model        | Pass Rate  | N Valid
+--------------------------------------------------
+5 min      | Bivariate    | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.092  LB=467.7  ED=4.616
+           |   Sell (t moy.) | KS=0.048  LB=204.8  ED=1.453
+5 min      | Sum-Exp      | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.070  LB=241.9  ED=1.494
+           |   Sell (t moy.) | KS=0.043  LB=154.1  ED=0.160
+10 min     | Bivariate    | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.089  LB=1164.2  ED=5.125
+           |   Sell (t moy.) | KS=0.046  LB=408.8  ED=2.183
+10 min     | Sum-Exp      | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.076  LB=911.0  ED=1.971
+           |   Sell (t moy.) | KS=0.040  LB=283.4  ED=-0.153
+20 min     | Bivariate    | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.073  LB=2966.7  ED=10.600
+           |   Sell (t moy.) | KS=0.051  LB=1318.1  ED=5.671
+20 min     | Sum-Exp      | 0.0%       | 10
+           |   Buy (t moy.) | KS=0.052  LB=1131.6  ED=3.537
+           |   Sell (t moy.) | KS=0.035  LB=603.4  ED=0.911

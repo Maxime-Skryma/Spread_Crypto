@@ -945,7 +945,7 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
         count_global = 0
         n_valid = 0
         sigma2_list = {1: [], 2: []}
-        stat_list = {1: dict(ks=[], lb=[], er=[]),                  # <-- AJOUT
+        stat_list = {1: dict(ks=[], lb=[], er=[]),                 
                      2: dict(ks=[], lb=[], er=[])}
 
         windows = _sample_random_windows(t, side, duration, n_per_size, rng, min_points)
@@ -964,10 +964,10 @@ def _aggregate_pass_rates(t, side, eval_window_fn, bounds, constraints,
                 if r["pass_ks"] and r["pass_lb"] and r["pass_er"]:
                     counts[dim]["joint"] += 1
                 sigma2_list[dim].append(r["sigma2"])
-                stat_list[dim]["ks"].append(r["ks_t"])              # <-- AJOUT
-                stat_list[dim]["lb"].append(r["lb_t"])              # <-- AJOUT
-                stat_list[dim]["er"].append(r["er_t"])              # <-- AJOUT
-            if (res[1]["pass_ks"] and res[1]["pass_lb"]) and (res[1]["pass_ks"] and res[1]["pass_er"]) and (res[1]["pass_lb"] and res[1]["pass_er"]):
+                stat_list[dim]["ks"].append(r["ks_t"])             
+                stat_list[dim]["lb"].append(r["lb_t"])             
+                stat_list[dim]["er"].append(r["er_t"])           
+            if ((res[1]["pass_ks"] and res[1]["pass_lb"]) or (res[1]["pass_ks"] and res[1]["pass_er"]) or (res[1]["pass_lb"] and res[1]["pass_er"])):
                 count_global += 1
 
         results[size_min] = {
@@ -994,12 +994,12 @@ def _print_pass_rate_summary(results, sizes_min):
         print(f"\n=== {size_min}-min windows  ({n} windows) ===")
         for dim, label in [(1, "Buys"), (2, "Sells")]:
             c = r["counts"][dim]
-            s = r["stat_mean"][dim]                                 # <-- AJOUT
+            s = r["stat_mean"][dim]                                
             print(f"  [{label}]  KS {100*c['ks']/n:.0f}% | "
                   f"LB {100*c['lb']/n:.0f}% | ED {100*c['er']/n:.0f}% | "
                   f"Joint {100*c['joint']/n:.0f}%  "
                   f"(median residual variance: {r['sigma2_median'][dim]:.3f})")
-            print(f"           stats moy.: KS={s['ks']:.3f} | LB={s['lb']:.1f} | ED={s['er']:.3f}")  # <-- AJOUT
+            print(f"           stats moy.: KS={s['ks']:.3f} | LB={s['lb']:.1f} | ED={s['er']:.3f}")  
 
 
 def pass_rate_by_window_size_bivariate(t, side, sizes_min=(5, 10, 20),
@@ -1076,6 +1076,26 @@ def compare_kernels_by_window_size(t, side, sizes_min=(5, 10, 20),
             print()
     return {"bivariate": results_biv, "sum_exp": results_sum}
 
+def _fit_window_bivariate(current_df, bounds, constraints):
+    t_w    = current_df['time_stamp'].to_numpy()
+    side_w = current_df['side'].to_numpy()
+    T_w = t_w[-1]
+    N1 = side_w.sum(); N2 = len(side_w) - N1
+    dt_mean = np.mean(np.diff(t_w))
+
+    theta_start = np.array([
+        max((N1 / T_w) * 0.5, 1e-3), max((N2 / T_w) * 0.5, 1e-3),
+        0.1, 0.1, 0.1, 0.1,
+        1.0 / dt_mean, 1.0 / dt_mean,
+    ])
+    res = minimize(
+        fun=neg_log_likelihood_bivariate, x0=theta_start, args=(current_df,),
+        method='trust-constr', bounds=bounds, constraints=constraints,
+        options={'maxiter': 2000, 'xtol': 1e-8, 'gtol': 1e-8, 'disp': False},
+    )
+    return res.x, res.success
+
+
 def _fit_window_sum_exp(current_df, bounds, constraints):
     t_w   = current_df['time_stamp'].to_numpy()
     side_w = current_df['side'].to_numpy()
@@ -1140,7 +1160,7 @@ def estimate_params_rolling(t, side, size_min, kernel='mono',
             return np.array([[theta[2] + theta[6], theta[4] + theta[8]],   # R total = echelle1 + echelle2
                              [theta[3] + theta[7], theta[5] + theta[9]]])
     else:
-        raise ValueError("kernel doit etre 'mono' ou 'sum'")
+        raise ValueError("kernel should be 'mono' or 'sum'")
 
     T_total = t[-1]
     rows = []
@@ -1163,7 +1183,7 @@ def estimate_params_rolling(t, side, size_min, kernel='mono',
 
 
 def plot_params_across_day(t, side, sizes_min=(10, 30, 60), kernel='mono', min_points=30):
-    colors = {10: 'green', 30: 'red', 60: 'orange'}
+    colors = {5: 'purple', 10: 'green', 20: 'brown', 30: 'red', 60: 'orange'}
     res = {s: estimate_params_rolling(t, side, s, kernel=kernel, min_points=min_points)
            for s in sizes_min}
 
@@ -1177,7 +1197,7 @@ def plot_params_across_day(t, side, sizes_min=(10, 30, 60), kernel='mono', min_p
 
     kern = 'mono-exp' if kernel == 'mono' else 'sum-exp'
     ax_mu.set_ylabel(r'Baseline $\mu_1+\mu_2$ (evts/s)')
-    ax_mu.set_title(f'Parametres en fenetres glissantes ({kern})')
+    ax_mu.set_title(f'Parameters over a sliding window ({kern})')
     ax_mu.legend(); ax_mu.grid(alpha=0.3)
     ax_eta.axhline(1.0, color='k', ls='--', lw=0.8)
     ax_eta.set_ylim(0, 1.05); ax_eta.set_xlabel('heure dans la serie (h)')

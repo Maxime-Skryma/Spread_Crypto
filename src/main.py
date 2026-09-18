@@ -39,7 +39,7 @@ def run_real_data(
     win_sizes=(5, 10, 20, 60),                 # size of windows : but it will be tested on all day
     n_windows=10,
     seed=42,
-    roll_sizes=(10),               
+    roll_sizes=(10,),               
     roll_min_points=30,                
 ):
     os.makedirs(out_dir, exist_ok=True)
@@ -122,8 +122,8 @@ def run_real_data(
 
             # Windows
             f.write("--- Window Comparison (sampled across the full day) ---\n")
-            f.write(f"{'Window':<10} | {'Model':<12} | {'Pass Rate':<10} | {'N Valid'}\n")
-            f.write("-" * 50 + "\n")
+            f.write("Per-test pass rate (KS/LB/ED) + mean test statistics, by window size\n")
+            f.write("-" * 60 + "\n")
 
             # Windows comparison on all the day
             # QQ-plot only on the window we defined
@@ -141,22 +141,18 @@ def run_real_data(
 
             for w in win_sizes:
                 r_b, r_s = res_win["bivariate"][w], res_win["sum_exp"][w]
-                p_b = f"{100*r_b['global']/r_b['n_valid']:.1f}%" if r_b['n_valid'] > 0 else "N/A"
-                p_s = f"{100*r_s['global']/r_s['n_valid']:.1f}%" if r_s['n_valid'] > 0 else "N/A"
-
-                f.write(f"{str(w)+' min':<10} | {'Bivariate':<12} | {p_b:<10} | {r_b['n_valid']}\n")
-                if r_b['n_valid'] > 0:
-                    for dim, lab in [(1, "Buy"), (2, "Sell")]:
-                        s = r_b['stat_mean'][dim]
-                        f.write(f"{'':<10} |   {lab+' (t moy.)':<10} | "
-                                f"KS={s['ks']:.3f}  LB={s['lb']:.1f}  ED={s['er']:.3f}\n")
-
-                f.write(f"{str(w)+' min':<10} | {'Sum-Exp':<12} | {p_s:<10} | {r_s['n_valid']}\n")
-                if r_s['n_valid'] > 0:
-                    for dim, lab in [(1, "Buy"), (2, "Sell")]:
-                        s = r_s['stat_mean'][dim]
-                        f.write(f"{'':<10} |   {lab+' (t moy.)':<10} | "
-                                f"KS={s['ks']:.3f}  LB={s['lb']:.1f}  ED={s['er']:.3f}\n")
+                for label, r in [("Bivariate", r_b), ("Sum-Exp", r_s)]:
+                    n = r['n_valid']
+                    f.write(f"{str(w)+' min':<10} | {label:<12} | N valid: {n}\n")
+                    if n > 0:
+                        for dim, lab in [(1, "Buy"), (2, "Sell")]:
+                            c = r['counts'][dim]
+                            s = r['stat_mean'][dim]
+                            f.write(f"{'':<10} |   {lab:<9} | "
+                                    f"KS {100*c['ks']/n:4.0f}% | LB {100*c['lb']/n:4.0f}% | "
+                                    f"ED {100*c['er']/n:4.0f}%   "
+                                    f"(t moy. KS={s['ks']:.3f} LB={s['lb']:.1f} ED={s['er']:.3f})\n")
+                f.write("\n")
 
             plot_price_volatility(raw_df)
 
@@ -194,7 +190,7 @@ if __name__ == "__main__":
         out_dir="btc_results",
         window_start="2026-09-01 13:05:00",   # 1:00 pm (UTC)
         window_end="2026-09-01 13:10:00",     # 1:05 pm (UTC)
-        win_sizes=(5, 10, 20),
+        win_sizes=(5, 10, 20, 60),
         n_windows=10,
-        roll_sizes=(10, 30, 60),
+        roll_sizes=(10,),
     )
