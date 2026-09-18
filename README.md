@@ -1,4 +1,4 @@
-# Spread_Crypto — Bivariate Hawkes modelling of Bitcoin order flow
+# Bivariate Hawkes modelling of Bitcoin order flow
 
 Maximum-likelihood estimation, goodness-of-fit testing and endogeneity
 measurement for the arrival dynamics of Bitcoin market orders, using
@@ -205,7 +205,7 @@ Key arguments of `run_real_data` (in `main.py`):
   vectorised/`numba` implementation would speed up the many-window studies.
 
 
-  
+
 - **Market making (WIP).** `market_making/` explores optimal quoting under Hawkes
   order flow (Avellaneda–Stoikov and Guéant–Lehalle–Tapia baselines, then Deep
   RL); see `market_making/README.md`.
