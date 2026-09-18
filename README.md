@@ -56,20 +56,24 @@ volume yields a particularly rich microstructure.
   $O(k)$ log-likelihood exploiting the exponential kernel's Markovian recursion.
   Optimisation uses `scipy` `trust-constr` under stationarity constraints
   (spectral radius of the branching matrix $< 1$).
+
 - **Goodness of fit.** Residual analysis via the **time-change theorem**: under a
   correct model the compensator increments $u = \Delta\Lambda$ between consecutive
   events are i.i.d. $\mathrm{Exp}(1)$. Three tests are applied per dimension:
   - **KS** — Kolmogorov–Smirnov against $\mathrm{Exp}(1)$ (marginal law),
   - **LB** — Ljung–Box at 20 lags (residual autocorrelation),
   - **ED** — Engle–Russell excess-dispersion test (over-dispersion).
+
 - **Pass rates by window size.** Random windows of several sizes (5/10/20/… min)
   are fitted across the full day; the fraction passing each test is reported,
   together with the mean test statistics
   (`compare_kernels_by_window_size`).
+
 - **Endogeneity across the day.** Sliding-window estimation of the baseline
   intensity $\mu$ and the branching ratio $\eta = \rho(R)$ along the session,
   for both kernels (`plot_params_across_day`), in the spirit of the reflexivity
   literature.
+
 - **Simulation cross-check.** Exact simulation of the fitted process (via the
   `tick` library) to compare synthetic order flow against the real one.
 
@@ -136,11 +140,13 @@ Spread_Crypto/
   signed series (`side = 1` buy / `0` sell, majority vote per timestamp;
   timestamps converted µs → s and re-based to 0); `extract_time_window`,
   `initialize_hawkes_params`, `initialize_hawkes_params_sum_exp`.
+
 - **`model.py`** — likelihoods and fits (`fit_bivariate`, `fit_bivariate_sum_exp`),
   residuals via time-change (`hawkes_residuals_bivariate*`), GoF
   (`bivariate_goodness_of_fit*`, `engle_russell_ed_test`), window pass-rates
   (`compare_kernels_by_window_size`), rolling endogeneity
   (`estimate_params_rolling`, `plot_params_across_day`), plotting (`qq_overlay`).
+
 - **`main.py`** — `run_real_data(...)` runs the whole study on one day and writes
   figures + a text summary to `out_dir`.
 
@@ -196,11 +202,14 @@ Key arguments of `run_real_data` (in `main.py`):
   pass rates are not directly comparable; reproducing the univariate mid-price
   case is the cleanest way to validate the implementation against published
   numbers.
+
 - **Kernel.** The exponential/sum-exp kernels are Markovian by design but only
   approximate the market's long memory; a **power-law** kernel is the natural next
   step (it improves fit in the literature at the cost of tractability).
+
 - **Stationarity.** The Hawkes MLE assumes constant parameters within a window;
   results favour short windows, and longer windows blend regimes.
+  
 - **Performance.** Likelihoods are pure-Python loops; an analytic gradient, which requires calculing all partial derivatives, or a
   vectorised/`numba` implementation would speed up the many-window studies.
 
