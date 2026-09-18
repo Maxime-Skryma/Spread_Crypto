@@ -25,10 +25,10 @@ def plot_price_volatility(raw_df, price_col='price', freq='1min', vol_window=30)
 
     fig, ax1 = plt.subplots(figsize=(14, 3))
     ax1.plot(h, price.values, color='navy', lw=0.7, label='Price')
-    ax1.set_ylabel('Price (USD)'); ax1.set_xlabel('heure dans la serie (h)')
+    ax1.set_ylabel('Price (USD)'); ax1.set_xlabel('hours')
     ax2 = ax1.twinx(); ax2.plot(h, vol.values, color='deepskyblue', lw=0.7, label='Volatility')
     ax2.set_ylabel('Std returns horaires')
-    ax1.set_title('Prix & volatilite'); plt.tight_layout(); plt.show()
+    ax1.set_title('Price & Volatility'); plt.tight_layout(); plt.show()
 
 
 def run_real_data(
@@ -64,7 +64,7 @@ def run_real_data(
             raw_win = raw_df[(ts >= start) & (ts < end)]
 
             if len(raw_win) == 0:
-                raise ValueError("Fenêtre vide : vérifie les dates et le fuseau (UTC).")
+                raise ValueError("Window empty : check dates and hours")
 
             # Preprocessing only on the window
             df_hawkes = build_hawkes_dataframe(raw_win)
