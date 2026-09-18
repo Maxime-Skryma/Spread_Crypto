@@ -165,15 +165,15 @@ def run_real_data(
                 min_points=roll_min_points,
             )
 
-            f.write("\n--- Rolling params (median sur la journee) ---\n")
+            f.write("\n--- Rolling params (median on the day) ---\n")
             for name, res_roll in [("Mono-Exp", res_roll_mono), ("Sum-Exp", res_roll_sum)]:
                 for w in roll_sizes:
                     d = res_roll[w]
                     if len(d):
                         f.write(f"{name:<9} {w} min : mu_tot~{d['mu_tot'].median():.4f} | "
-                                f"eta~{d['eta'].median():.3f} | n_fenetres={len(d)}\n")
+                                f"eta~{d['eta'].median():.3f} | n_windows={len(d)}\n")
                     else:
-                        f.write(f"{name:<9} {w} min : aucune fenetre valide\n")
+                        f.write(f"{name:<9} {w} min : no validated window\n")
 
     finally:
         plt.show = original_show
