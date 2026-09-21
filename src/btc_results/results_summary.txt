@@ -1,0 +1,52 @@
+=== REAL DATA RESULTS ===
+Window : 2026-09-01 13:05:00 -> 2026-09-01 13:10:00
+
+Events in window : 6266 (buys=3983, sells=2283)
+
+--- Global Bivariate Fit (Mono-Exp) ---
+Dim 1 (Buy)  -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+Dim 2 (Sell) -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+
+--- Global Bivariate Fit (Sum-Exp) ---
+Dim 1 (Buy)  -> KS: 0.0000 | LB: 0.0000 | ED: 0.0000
+Dim 2 (Sell) -> KS: 0.0402 | LB: 0.0000 | ED: 0.4764
+
+--- Window Comparison (sampled across the full day) ---
+Per-test pass rate (KS/LB/ED) + mean test statistics, by window size
+------------------------------------------------------------
+5 min      | Bivariate    | N valid: 10
+           |   Buy       | KS   20% | LB    0% | ED   30%   (t moy. KS=0.092 LB=467.7 ED=4.617)
+           |   Sell      | KS   70% | LB    0% | ED   60%   (t moy. KS=0.048 LB=204.7 ED=1.453)
+5 min      | Sum-Exp      | N valid: 10
+           |   Buy       | KS   30% | LB    0% | ED   60%   (t moy. KS=0.069 LB=241.0 ED=1.333)
+           |   Sell      | KS   80% | LB    0% | ED   90%   (t moy. KS=0.043 LB=159.5 ED=0.092)
+
+10 min     | Bivariate    | N valid: 10
+           |   Buy       | KS   10% | LB    0% | ED   10%   (t moy. KS=0.089 LB=1164.3 ED=5.124)
+           |   Sell      | KS   30% | LB    0% | ED   60%   (t moy. KS=0.046 LB=408.8 ED=2.183)
+10 min     | Sum-Exp      | N valid: 10
+           |   Buy       | KS   20% | LB    0% | ED   50%   (t moy. KS=0.076 LB=593.9 ED=1.064)
+           |   Sell      | KS   30% | LB    0% | ED   90%   (t moy. KS=0.040 LB=326.5 ED=0.061)
+
+20 min     | Bivariate    | N valid: 10
+           |   Buy       | KS    0% | LB    0% | ED   10%   (t moy. KS=0.073 LB=2966.9 ED=10.600)
+           |   Sell      | KS   10% | LB    0% | ED    0%   (t moy. KS=0.051 LB=1316.6 ED=5.660)
+20 min     | Sum-Exp      | N valid: 10
+           |   Buy       | KS   10% | LB    0% | ED   20%   (t moy. KS=0.052 LB=862.6 ED=2.528)
+           |   Sell      | KS   10% | LB    0% | ED   70%   (t moy. KS=0.035 LB=613.3 ED=0.867)
+
+60 min     | Bivariate    | N valid: 10
+           |   Buy       | KS    0% | LB    0% | ED    0%   (t moy. KS=0.063 LB=11546.5 ED=19.575)
+           |   Sell      | KS    0% | LB    0% | ED    0%   (t moy. KS=0.039 LB=3786.6 ED=7.513)
+60 min     | Sum-Exp      | N valid: 9
+           |   Buy       | KS    0% | LB    0% | ED   22%   (t moy. KS=0.055 LB=2880.5 ED=5.442)
+           |   Sell      | KS    0% | LB    0% | ED   56%   (t moy. KS=0.035 LB=2277.0 ED=0.994)
+
+
+--- Rolling params (median on the day) ---
+Mono-Exp  10 min : mu_tot~3.1988 | eta~0.472 | n_windows=143
+Mono-Exp  20 min : mu_tot~3.1962 | eta~0.465 | n_windows=71
+Mono-Exp  30 min : mu_tot~3.2754 | eta~0.451 | n_windows=47
+Sum-Exp   10 min : mu_tot~2.2479 | eta~0.629 | n_windows=142
+Sum-Exp   20 min : mu_tot~2.2986 | eta~0.642 | n_windows=71
+Sum-Exp   30 min : mu_tot~2.2515 | eta~0.627 | n_windows=47
