@@ -88,7 +88,7 @@ volume yields a particularly rich microstructure.
 
 ![QQ-plot - sell](src/btc_results/fig_02.png)
 
-![Sliding Window for Sum-Exp](src/btc_results/fig_01.png)
+![Sliding Window for Sum-Exp](src/btc_results/fig_04.png)
 ---
 
 ## Repository structure
