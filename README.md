@@ -78,40 +78,14 @@ volume yields a particularly rich microstructure.
   `tick` library) to compare synthetic order flow against the real one.
 
 ---
-
-## Empirical results
-
-> Numbers below are placeholders — fill them from `src/btc_results/results_summary.txt`
-> after a run. The qualitative picture is what matters here.
-
-**Poisson is inadequate.** Following *Quantifying endogeneity of cryptocurrency
-markets*, a barcode plot compares real buy arrivals with a homogeneous Poisson
-process calibrated to the same empirical rate. The Poisson stream visibly fails
-to reproduce the heavy **clustering** of market events.
-
-**Marginal law vs dependence.** The KS test passes in most windows (the residual
-marginal is close to $\mathrm{Exp}(1)$), but **LB and ED reject** widely: there is
-residual autocorrelation and over-dispersion that the time-change does not remove.
-
-**Mono-exp vs sum-exp.** The sum-of-exponentials kernel does not fully whiten the
-flow either, but it **markedly reduces over-dispersion** — the ED statistic drops
-from $\approx <ED\_mono>$ to $\approx <ED\_sum>$ (20-min windows) — and lowers the
-LB statistic. The single-exponential kernel captures the *timing* of clustering
-but under-estimates the largest bursts.
-
-**Endogeneity.** The estimated branching ratio stays high ($\eta \approx <eta>$)
-and spikes toward $1$ during volatile episodes, the signature of a strongly
-**endogenous** market where most trades are triggered by other trades.
-
-**Non-stationarity.** Pass rates degrade as the window lengthens (most clearly on
-LB/ED at 60 min), consistent with regime changes inside longer windows — which is
-why the sliding-window analysis favours short windows.
-
 | Figure | File | Content |
 |---|---|---|
 | QQ-plot, buys | `src/btc_results/fig_01.png` | residual quantiles, mono vs sum |
 | QQ-plot, sells | `src/btc_results/fig_02.png` | residual quantiles, mono vs sum |
-| Price & volatility | `src/btc_results/fig_03.png` | market context over the day |
+| Sliding Window for Mono-Exp | `src/btc_results/fig_03.png` | Plot of mono-exp on sliding different sizes windows  |
+| Sliding Window for Sum-Exp | `src/btc_results/fig_04.png` | Plot of sum-exp on sliding different sizes windows |
+| Pass-Rates and t-values | `src/btc_results/results_summary.txt` | Table of all pass-rates over different window sizes |
+
 
 ---
 
@@ -209,11 +183,6 @@ Key arguments of `run_real_data` (in `main.py`):
 
 - **Stationarity.** The Hawkes MLE assumes constant parameters within a window;
   results favour short windows, and longer windows blend regimes.
-  
-- **Performance.** Likelihoods are pure-Python loops; an analytic gradient, which requires calculing all partial derivatives, or a
-  vectorised/`numba` implementation would speed up the many-window studies.
-
-
 
 - **Market making (WIP).** `market_making/` explores optimal quoting under Hawkes
   order flow (Avellaneda–Stoikov and Guéant–Lehalle–Tapia baselines, then Deep
@@ -228,7 +197,6 @@ Key arguments of `run_real_data` (in `main.py`):
 - E. Bacry, I. Mastromatteo, J.-F. Muzy (2015), *Hawkes processes in finance.*
 - Mark et al., *Quantifying endogeneity of cryptocurrency markets*
   (exponential vs power-law kernels for mid-price changes).
-- *Quantifying endogeneity of cryptocurrency markets.*
 - M. Avellaneda, S. Stoikov (2008), *High-frequency trading in a limit order book.*
 - O. Guéant, C.-A. Lehalle, J. Fernandez-Tapia (2012), *Dealing with the inventory
   risk: a solution to the market making problem.*
