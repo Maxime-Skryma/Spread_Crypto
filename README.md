@@ -62,7 +62,7 @@ volume yields a particularly rich microstructure.
   events are i.i.d. $\mathrm{Exp}(1)$. Three tests are applied per dimension:
   - **KS** — Kolmogorov–Smirnov against $\mathrm{Exp}(1)$ (marginal law),
   - **LB** — Ljung–Box at 20 lags (residual autocorrelation),
-  - **ED** — Engle–Russell excess-dispersion test (over-dispersion).
+  - **ER** — Engle–Russell excess-dispersion test (over-dispersion).
 
 - **Pass rates by window size.** Random windows of several sizes (5/10/20/… min)
   are fitted across the full day; the fraction passing each test is reported,
@@ -86,7 +86,7 @@ volume yields a particularly rich microstructure.
 | Sliding Window for Sum-Exp | `src/btc_results/fig_04.png` | Plot of sum-exp on sliding different sizes windows |
 | Pass-Rates and t-values | `src/btc_results/results_summary.txt` | Table of all pass-rates over different window sizes |
 
-
+![QQ-plot](src/btc_results/fig_01.png)
 ---
 
 ## Repository structure
