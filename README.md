@@ -44,7 +44,7 @@ and spilling onto the buy side).
 
 We study **Bitcoin** for two reasons: its high volatility with no institutional
 circuit breakers favours cascading dynamics, and its massive algorithmic order
-volume yields a particularly rich microstructure.
+volume yields a particularly rich microstructure. 
 
 The full paper containing all mathematical derivations is available on my LinkedIn profile, 
 or you can request a copy directly via email at maxime.skryma@gmail.com
