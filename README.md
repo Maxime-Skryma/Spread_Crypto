@@ -86,7 +86,9 @@ volume yields a particularly rich microstructure.
 | Sliding Window for Sum-Exp | `src/btc_results/fig_04.png` | Plot of sum-exp on sliding different sizes windows |
 | Pass-Rates and t-values | `src/btc_results/results_summary.txt` | Table of all pass-rates over different window sizes |
 
-![QQ-plot](src/btc_results/fig_01.png)
+![QQ-plot - sell](src/btc_results/fig_02.png)
+
+![Sliding Window for Sum-Exp](src/btc_results/fig_01.png)
 ---
 
 ## Repository structure
