@@ -4,6 +4,10 @@ Maximum-likelihood estimation, goodness-of-fit testing and endogeneity
 measurement for the arrival dynamics of Bitcoin market orders, using
 bivariate Hawkes processes with exponential and sum-of-exponentials kernels.
 
+
+You are currently on the first part of this project, **Spread_Crypto**, where we explore cryptocurrency spreads and market making. To see the next part, focusing on Hawkes models and deep reinforcement learning, visit [BTC_Hawkes_Deep_RL](https://github.com/Maxime-Skryma/BTC_Hawkes_Deep_RL).
+
+
 ---
 
 ## Abstract
